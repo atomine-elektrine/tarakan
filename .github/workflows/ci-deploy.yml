@@ -38,21 +38,21 @@ jobs:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Install Erlang and Elixir
-        uses: erlef/setup-beam@988e02bfe678367a02564f65ca2e37726dc0268f # v1.9.0
-        with:
-          otp-version: "29.0.2"
-          elixir-version: "1.20.1"
-          version-type: strict
-
-      - name: Install Mix tooling and dependencies
-        run: |
-          mix local.hex --force
-          mix local.rebar --force
-          mix deps.get
-
       - name: Run pre-commit checks
-        run: mix precommit
+        run: |
+          docker run --rm --network host \
+            --volume "$GITHUB_WORKSPACE:/app" \
+            --workdir /app \
+            --env MIX_ENV=test \
+            docker.io/hexpm/elixir:1.20.1-erlang-29.0.2-debian-trixie-20260610-slim \
+            bash -lc '
+              apt-get update
+              apt-get install -y --no-install-recommends build-essential git
+              mix local.hex --force
+              mix local.rebar --force
+              mix deps.get
+              mix precommit
+            '
 
   deploy:
     name: Deploy production
