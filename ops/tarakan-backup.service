@@ -1,0 +1,23 @@
+[Unit]
+Description=Back up Tarakan database and hosted repositories
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=linuxuser
+Group=linuxuser
+WorkingDirectory=/opt/tarakan
+ExecStart=/opt/tarakan/ops/backup.sh
+
+# The backup process only needs its application directory and Docker.
+NoNewPrivileges=true
+PrivateTmp=true
+# Debian's Docker CLI discovers its Compose plugin through a home-visible path.
+# Keep home directories immutable while allowing plugin discovery.
+ProtectHome=read-only
+ProtectSystem=full
+ReadWritePaths=/opt/tarakan/backups
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Tarakan backup daily
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=tarakan-backup.service
+
+[Install]
+WantedBy=timers.target
