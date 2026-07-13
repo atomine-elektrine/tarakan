@@ -1,0 +1,578 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb navigate={TarakanWeb.RepositoryPaths.repository_path(@task.repository)}>
+        {@task.repository.owner}/{@task.repository.name}
+      </:crumb>
+      <:crumb>request/{@task.id}</:crumb>
+    </.breadcrumbs>
+
+    <main id="review-task" class="border-2 border-strong">
+      <header class="border-b-2 border-strong bg-panel px-5 py-5 sm:px-8 sm:py-6">
+        <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <span id="review-task-status" class="border border-rule px-2 py-1 text-ink-muted">
+            {task_status(@task)}
+          </span>
+          <span
+            :if={@task.linked_review_id && @task.linked_review}
+            id="review-task-linked-review"
+            class="border border-phosphor/40 px-2 py-1 text-phosphor"
+          >
+            Review #{@task.linked_review.id} · {@task.linked_review.findings_count} findings · {@task.linked_review.review_status}
+          </span>
+          <span
+            :if={
+              @task.status in ["submitted", "accepted"] and is_nil(@task.linked_review_id) and
+                @task.kind != "write_fix"
+            }
+            id="review-task-historical-badge"
+            class="border border-rule px-2 py-1 text-ink-faint"
+          >
+            Historical notes only - no structured Review
+          </span>
+          <span
+            :if={@task.status in ["submitted", "accepted"] and @task.kind == "write_fix"}
+            id="review-task-fix-badge"
+            class="border border-phosphor/40 px-2 py-1 text-phosphor"
+          >
+            Patch proposal
+          </span>
+          <span
+            :if={@task.status == "accepted"}
+            id="review-task-visibility"
+            class="border border-rule px-2 py-1 text-ink-muted"
+          >
+            {visibility_label(@task.visibility)}
+          </span>
+          <span>{kind_label(@task.kind)}</span>
+          <span>·</span>
+          <span>{provenance_label(@task.capability)} required</span>
+          <span>·</span>
+          <span title={@task.commit_sha}>{short_sha(@task.commit_sha)}</span>
+        </div>
+        <h1
+          id="review-task-title"
+          class="mt-3 font-display text-2xl uppercase leading-tight tracking-[0.04em] text-ink sm:text-3xl"
+        >
+          {@task.title}
+        </h1>
+        <p
+          :if={String.trim(@task.description || "") != ""}
+          class="mt-3 max-w-3xl whitespace-pre-line text-sm leading-6 text-ink-muted"
+        >
+          {String.trim(@task.description)}
+        </p>
+        <p class="mt-3 font-mono text-[11px] text-ink-faint">
+          Opened by <span class="text-ink-muted">@{@task.created_by.handle}</span>
+          · commit <span title={@task.commit_sha}>{short_sha(@task.commit_sha)}</span>
+        </p>
+      </header>
+
+      <section
+        :if={@task.kind == "verify_findings"}
+        id="review-task-target-report"
+        class="border-b border-rule bg-ground px-5 py-5 sm:px-8"
+      >
+        <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <span>Target report #{@task.target_review_id}</span>
+          <%= if @visible_target_review do %>
+            <span>·</span>
+            <span>{@visible_target_review.findings_count} findings</span>
+            <span>·</span>
+            <span>{@visible_target_review.review_status}</span>
+            <span>·</span>
+            <span title={@visible_target_review.commit_sha}>{short_sha(
+              @visible_target_review.commit_sha
+            )}</span>
+          <% end %>
+        </div>
+        <p class="mt-2 text-sm leading-6 text-ink-muted">
+          Reproduce or dispute every visible finding against the target report's exact commit.
+        </p>
+        <ul
+          :if={@visible_target_review && @visible_target_review.details_visible}
+          class="mt-4 space-y-2"
+        >
+          <li
+            :for={finding <- @visible_target_review.findings}
+            class="border-l-2 border-rule pl-3 text-xs leading-5 text-ink-muted"
+          >
+            <span class="font-mono text-[10px] uppercase text-ink-faint">
+              {finding.severity} · {finding.file_path}:{finding.line_start}
+            </span>
+            <span class="ml-2 font-semibold text-ink">{finding.title}</span>
+          </li>
+        </ul>
+        <p
+          :if={is_nil(@visible_target_review) || !@visible_target_review.details_visible}
+          class="mt-3 text-xs leading-5 text-ink-faint"
+        >
+          Finding details are restricted until an authorized contributor claims the check.
+        </p>
+        <div
+          :if={@visible_target_review && @visible_target_review.confirmations != []}
+          id="review-task-target-confirmations"
+          class="mt-5 border-t border-rule pt-4"
+        >
+          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            Recorded checks
+          </p>
+          <article
+            :for={confirmation <- @visible_target_review.confirmations}
+            class="mt-3 border-l-2 border-phosphor pl-4"
+          >
+            <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-muted">
+              {confirmation.verdict} · {provenance_label(confirmation.provenance)}
+              <span :if={confirmation.account}> · @{confirmation.account.handle}</span>
+            </p>
+            <p
+              :if={confirmation.notes}
+              class="mt-2 whitespace-pre-line text-xs leading-5 text-ink-muted"
+            >
+              {confirmation.notes}
+            </p>
+            <pre
+              :if={confirmation.evidence}
+              class="mt-2 overflow-x-auto whitespace-pre-wrap border border-rule bg-panel p-3 font-mono text-[11px] leading-5 text-ink"
+            >{confirmation.evidence}</pre>
+          </article>
+        </div>
+      </section>
+
+      <section
+        :if={@task.status == "proposed"}
+        id="review-task-proposal"
+        class="px-5 py-6 sm:px-8"
+      >
+        <%= cond do %>
+          <% can_publish?(@task, @current_scope) -> %>
+            <p class="mb-5 max-w-2xl text-sm leading-6 text-ink-muted">
+              Confirm the scope is safe and useful before it enters the public job queue.
+              Repository stewards and moderators may publish, including Jobs they proposed.
+            </p>
+            <.form for={@decision_form} id="publish-review-task-form" phx-submit="publish">
+              <.input
+                field={@decision_form[:reason]}
+                type="textarea"
+                label="Approval reason"
+                placeholder="Why is this job safe, scoped, and useful?"
+              />
+              <button
+                id="publish-review-task-button"
+                type="submit"
+                class="clip-notch mt-5 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90"
+              >
+                Publish job
+              </button>
+            </.form>
+          <% created_by_current_account?(@task, @current_scope) -> %>
+            <p id="review-task-proposed-notice" class="text-sm text-ink-muted">
+              Awaiting a steward or moderator to publish this job.
+            </p>
+          <% true -> %>
+            <p class="text-sm text-ink-muted">
+              This proposal is awaiting a steward or moderator.
+            </p>
+        <% end %>
+      </section>
+
+      <section
+        :if={@task.status in ["open", "claimed", "changes_requested"]}
+        id="review-task-actions"
+        class="px-5 py-6 sm:px-8"
+      >
+        <%= cond do %>
+          <% owns_claim?(@task, @current_scope) -> %>
+            <div class="mb-6 flex flex-wrap items-center justify-between gap-3 border-b border-rule pb-5">
+              <p class="text-sm text-ink-muted">
+                You hold this job until <span class="font-mono text-ink">{Calendar.strftime(@task.claim_expires_at, "%H:%M UTC")}</span>.
+              </p>
+              <button
+                id="release-review-task-button"
+                phx-click="release"
+                class="font-mono text-xs text-ink-faint transition hover:text-signal"
+              >
+                Release claim
+              </button>
+            </div>
+
+            <%= cond do %>
+              <% @task.kind == "verify_findings" and agent_primary_path?(@task) -> %>
+                <div id="review-task-agent-path" class="space-y-4">
+                  <p class="text-sm leading-6 text-ink-muted">
+                    Run an independent agent check against every finding in the target report.
+                  </p>
+                  <div class="border-2 border-strong bg-panel px-4 py-4 font-mono text-xs leading-6 text-ink">
+                    <p class="text-[10px] uppercase tracking-[0.16em] text-ink-faint">CLI</p>
+                    <pre class="mt-2 overflow-x-auto whitespace-pre-wrap">tarakan worker --agent grok --once --jobs-only</pre>
+                  </div>
+                </div>
+              <% @task.kind == "write_fix" and agent_primary_path?(@task) -> %>
+                <div id="review-task-agent-path" class="space-y-4">
+                  <p class="text-sm leading-6 text-ink-muted">
+                    The autonomous worker will produce a reviewable unified diff and test plan without modifying the repository.
+                  </p>
+                  <div class="border-2 border-strong bg-panel px-4 py-4 font-mono text-xs leading-6 text-ink">
+                    <p class="text-[10px] uppercase tracking-[0.16em] text-ink-faint">CLI</p>
+                    <pre class="mt-2 overflow-x-auto whitespace-pre-wrap">tarakan worker --agent grok --once --jobs-only</pre>
+                  </div>
+                </div>
+              <% agent_primary_path?(@task) -> %>
+                <div id="review-task-agent-path" class="space-y-4">
+                  <p class="text-sm leading-6 text-ink-muted">
+                    This job requires <span class="font-semibold text-ink">agent</span> work.
+                  </p>
+                  <div class="border-2 border-strong bg-panel px-4 py-4 font-mono text-xs leading-6 text-ink">
+                    <p class="text-[10px] uppercase tracking-[0.16em] text-ink-faint">CLI</p>
+                    <pre class="mt-2 overflow-x-auto whitespace-pre-wrap">tarakan report --agent grok --job {@task.id} --yes
+# or: tarakan report --agent grok --job {@task.id} --interactive</pre>
+                  </div>
+                  <p class="text-xs leading-5 text-ink-faint">
+                    Agents: <span class="font-mono text-ink">grok</span>, <span class="font-mono text-ink">codex</span>, <span class="font-mono text-ink">claude</span>.
+                  </p>
+                </div>
+              <% @task.kind == "verify_findings" -> %>
+                <.form
+                  for={@verification_form}
+                  id="review-task-verification-form"
+                  phx-submit="complete_verification"
+                >
+                  <div class="grid gap-4">
+                    <.input
+                      field={@verification_form[:provenance]}
+                      type="select"
+                      label="How was this check produced?"
+                      options={@provenance_options}
+                    />
+                    <.input
+                      field={@verification_form[:verdict]}
+                      type="select"
+                      label="Overall verdict"
+                      options={[{"Confirmed", "confirmed"}, {"Disputed", "disputed"}]}
+                    />
+                    <.input
+                      field={@verification_form[:notes]}
+                      type="textarea"
+                      label="Verification rationale"
+                      placeholder="Explain what was reproduced or why the report is incorrect."
+                    />
+                    <.input
+                      field={@verification_form[:evidence]}
+                      type="textarea"
+                      label="Proof of concept or counter-evidence"
+                      placeholder="Commands, exact traces, observed output, and relevant file:line references"
+                    />
+                  </div>
+                  <button
+                    id="complete-review-task-button"
+                    type="submit"
+                    class="clip-notch mt-5 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-submit-loading:opacity-60"
+                  >
+                    Submit verification
+                  </button>
+                </.form>
+              <% true -> %>
+                <.form
+                  for={@contribution_form}
+                  id="review-task-completion-form"
+                  phx-change="validate_contribution"
+                  phx-submit="complete"
+                >
+                  <div class="grid gap-4">
+                    <.input
+                      field={@contribution_form[:provenance]}
+                      type="select"
+                      label="How was this work produced?"
+                      options={@provenance_options}
+                    />
+                    <.input
+                      field={@contribution_form[:summary]}
+                      type="textarea"
+                      label={
+                        if @task.kind == "write_fix", do: "Fix summary", else: "Result summary"
+                      }
+                      placeholder={
+                        if @task.kind == "write_fix",
+                          do: "What does the proposed patch change and why?",
+                          else: "What did you establish, reproduce, or refute?"
+                      }
+                    />
+                    <.input
+                      field={@contribution_form[:evidence]}
+                      type="textarea"
+                      label={
+                        if @task.kind == "write_fix",
+                          do: "Proposed unified diff and test plan",
+                          else: "Evidence and reproduction notes"
+                      }
+                      placeholder={
+                        if @task.kind == "write_fix",
+                          do: "Paste a unified diff followed by tests that should prove the fix",
+                          else:
+                            "File paths, test commands, observations, and remaining uncertainty"
+                      }
+                    />
+                  </div>
+                  <button
+                    id="complete-review-task-button"
+                    type="submit"
+                    class="clip-notch mt-5 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-submit-loading:opacity-60"
+                  >
+                    Submit for review
+                  </button>
+                </.form>
+            <% end %>
+          <% can_claim?(@task, @current_scope) -> %>
+            <p class="max-w-2xl text-sm leading-6 text-ink-muted">
+              Claiming reserves this job for two hours. Creators may claim and perform their own Jobs.
+            </p>
+            <button
+              id="claim-review-task-button"
+              phx-click="claim"
+              class="clip-notch mt-4 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90"
+            >
+              Claim job
+            </button>
+          <% @task.claimed_by && ReviewTask.claim_active?(@task) -> %>
+            <p id="review-task-claimed-notice" class="text-sm text-ink-muted">
+              Claimed by <span class="font-semibold text-ink">@{@task.claimed_by.handle}</span>.
+            </p>
+          <% true -> %>
+            <.link
+              navigate={~p"/accounts/log-in"}
+              class="font-mono text-xs text-signal hover:underline"
+            >
+              Sign in to claim this task.
+            </.link>
+        <% end %>
+      </section>
+
+      <section
+        :if={@task.status == "submitted"}
+        id="review-task-review"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <%= if can_review?(@task, @current_scope) do %>
+          <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">
+            Independent review
+          </h2>
+          <.form
+            for={@decision_form}
+            id="review-task-decision-form"
+            phx-submit="review"
+            class="mt-5"
+          >
+            <div class="grid gap-4">
+              <.input field={@decision_form[:reason]} type="textarea" label="Decision reason" />
+              <.input
+                field={@decision_form[:evidence]}
+                type="textarea"
+                label="Independent evidence"
+              />
+            </div>
+            <div class="mt-5 flex flex-wrap gap-3">
+              <button
+                id="accept-review-task-button"
+                type="submit"
+                name="action"
+                value="accept"
+                class="clip-notch bg-btn px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-btn-fg"
+              >
+                Close request
+              </button>
+              <button
+                id="request-changes-review-task-button"
+                type="submit"
+                name="action"
+                value="request_changes"
+                class="border border-rule px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-ink"
+              >
+                Request changes
+              </button>
+              <button
+                id="reject-review-task-button"
+                type="submit"
+                name="action"
+                value="reject"
+                class="border border-signal px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-signal"
+              >
+                Reject
+              </button>
+            </div>
+          </.form>
+        <% else %>
+          <p id="review-task-review-pending" class="text-sm text-ink-muted">
+            Evidence submitted. Awaiting independent review.
+          </p>
+        <% end %>
+      </section>
+
+      <section
+        :if={@task.status == "accepted"}
+        id="review-task-disclosure"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <%= if can_disclose?(@task, @current_scope) do %>
+          <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">
+            Disclosure decision
+          </h2>
+          <.form
+            for={@disclosure_form}
+            id="review-task-disclosure-form"
+            phx-submit="disclose"
+            class="mt-5"
+          >
+            <.input
+              field={@disclosure_form[:reason]}
+              type="textarea"
+              label="Disclosure reason"
+              placeholder="Why is this result safe and useful to disclose?"
+            />
+            <div :if={full_disclosure_allowed?(@task)} class="mt-4">
+              <.input
+                field={@disclosure_form[:sensitive_data_reviewed]}
+                type="checkbox"
+                label="I checked the evidence for secrets, credentials, and personal data"
+              />
+            </div>
+            <div class="mt-5 flex flex-wrap gap-3">
+              <button
+                id="publish-review-task-summary-button"
+                type="submit"
+                name="visibility"
+                value="public_summary"
+                class="clip-notch bg-btn px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-btn-fg"
+              >
+                Publish summary
+              </button>
+              <button
+                :if={full_disclosure_allowed?(@task)}
+                id="publish-review-task-full-button"
+                type="submit"
+                name="visibility"
+                value="public"
+                class="border border-rule px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-ink"
+              >
+                Publish full evidence
+              </button>
+            </div>
+          </.form>
+        <% else %>
+          <p id="review-task-disclosure-pending" class="text-sm text-ink-muted">
+            <%= if @task.visibility == "restricted" do %>
+              Accepted. Awaiting a disclosure decision.
+            <% else %>
+              This result has an attributable disclosure decision.
+            <% end %>
+          </p>
+        <% end %>
+      </section>
+
+      <section
+        :if={@task.linked_review}
+        id="review-task-linked-review-detail"
+        class="border-t border-rule px-5 py-6 sm:px-8 sm:py-8"
+      >
+        <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <span>Linked Review #{@task.linked_review.id}</span>
+          <span>·</span>
+          <span>{@task.linked_review.review_status}</span>
+          <span>·</span>
+          <span>{provenance_label(@task.linked_review.provenance)}</span>
+        </div>
+        <h2 class="mt-5 font-display text-xl uppercase tracking-[0.08em] text-ink">
+          Structured findings
+        </h2>
+        <p class="mt-2 text-sm text-ink-muted">
+          Request submitted. The linked report remains separately {@task.linked_review.review_status} until its findings are independently checked - closing this request does not accept the report.
+        </p>
+        <ul class="mt-5 space-y-3">
+          <li
+            :for={finding <- @task.linked_review.findings || []}
+            class="border border-rule px-4 py-3"
+          >
+            <div class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+              {finding.severity} · {finding.file_path}:{finding.line_start}
+            </div>
+            <div class="mt-1 text-sm font-semibold text-ink">{finding.title}</div>
+            <p class="mt-1 text-xs leading-5 text-ink-muted">{finding.description}</p>
+          </li>
+        </ul>
+      </section>
+
+      <section
+        :if={@task.contribution}
+        id="review-task-contribution"
+        class="border-t border-rule px-5 py-6 sm:px-8 sm:py-8"
+      >
+        <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          <span>
+            <%= cond do %>
+              <% @task.kind == "write_fix" -> %>
+                Patch proposal v{@task.contribution.version} by @{@task.contribution.account.handle}
+              <% @task.linked_review_id -> %>
+                Notes v{@task.contribution.version} by @{@task.contribution.account.handle}
+              <% true -> %>
+                Historical notes v{@task.contribution.version} by @{@task.contribution.account.handle}
+            <% end %>
+          </span>
+          <span>·</span>
+          <span>{provenance_label(@task.contribution.provenance)}</span>
+        </div>
+        <h2 class="mt-5 font-display text-xl uppercase tracking-[0.08em] text-ink">
+          <%= cond do %>
+            <% @task.kind == "write_fix" -> %>
+              Proposed fix
+            <% @task.linked_review_id -> %>
+              Result
+            <% true -> %>
+              Historical notes
+          <% end %>
+        </h2>
+        <p
+          :if={is_nil(@task.linked_review_id) and @task.kind != "write_fix"}
+          class="mt-2 text-xs text-ink-faint"
+        >
+          Free-text evidence only - no Findings on this submission.
+        </p>
+        <p :if={@task.kind == "write_fix"} class="mt-2 text-xs text-ink-faint">
+          Reviewable patch artifact only - Tarakan did not modify or push to the repository.
+        </p>
+        <p class="mt-3 whitespace-pre-line text-sm leading-6 text-ink-muted">
+          {@task.contribution.summary}
+        </p>
+        <div :if={@task.contribution.evidence} class="mt-6 border-l-2 border-rule pl-5">
+          <h3 class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            {if @task.kind == "write_fix", do: "Proposed patch and tests", else: "Evidence"}
+          </h3>
+          <pre class="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-xs leading-6 text-ink-muted">
+            {@task.contribution.evidence}
+          </pre>
+        </div>
+      </section>
+
+      <section
+        :if={can_cancel?(@task, @current_scope)}
+        id="review-task-cancellation"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <.form for={@decision_form} id="cancel-review-task-form" phx-submit="cancel">
+          <.input
+            field={@decision_form[:reason]}
+            type="textarea"
+            label="Cancellation reason"
+            placeholder="Explain why this work should be withdrawn."
+          />
+          <button
+            id="cancel-review-task-button"
+            type="submit"
+            class="mt-4 font-mono text-xs text-signal hover:underline"
+          >
+            Cancel task
+          </button>
+        </.form>
+      </section>
+    </main>
+  </Layouts.page>
+</Layouts.app>

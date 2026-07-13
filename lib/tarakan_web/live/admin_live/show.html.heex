@@ -1,0 +1,91 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page id="admin-account" width={:focused} class={["py-6 sm:py-10"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb navigate={~p"/admin"}>admin</:crumb>
+      <:crumb>@{@account.handle}</:crumb>
+    </.breadcrumbs>
+
+    <header class={["mt-4 border-b-2 border-strong pb-6"]}>
+      <p class={["font-mono text-[10px] uppercase tracking-[0.2em] text-signal"]}>
+        Account authority
+      </p>
+      <h1 class={["mt-2 font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-4xl"]}>
+        Manage @{@account.handle}
+      </h1>
+      <p class={["mt-3 text-sm leading-6 text-ink-muted"]}>
+        Changes take effect immediately, invalidate connected authorization state, and are recorded in the audit log.
+      </p>
+    </header>
+
+    <section class={["mt-6 grid gap-4 border-2 border-strong bg-panel p-5 sm:grid-cols-2 sm:p-6"]}>
+      <div>
+        <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>Email</p>
+        <p id="admin-account-email" class={["mt-1 break-all text-sm text-ink"]}>
+          {@account.email}
+        </p>
+      </div>
+      <div>
+        <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>
+          Reputation
+        </p>
+        <p id="admin-account-reputation" class={["mt-1 text-sm text-ink"]}>
+          {@account.reputation}
+        </p>
+      </div>
+    </section>
+
+    <.form
+      for={@authorization_form}
+      id="admin-authorization-form"
+      phx-change="validate"
+      phx-submit="save"
+      class={["mt-6 space-y-5 border-2 border-strong bg-panel p-5 sm:p-6"]}
+    >
+      <div>
+        <h2 class={["font-display text-xl uppercase tracking-[0.05em] text-ink"]}>
+          Authorization
+        </h2>
+        <p class={["mt-1 text-xs leading-5 text-ink-faint"]}>
+          Suspending or banning an account revokes its sessions, API credentials, and SSH keys.
+        </p>
+      </div>
+
+      <div class={["grid gap-4 sm:grid-cols-3"]}>
+        <.input
+          field={@authorization_form[:state]}
+          type="select"
+          label="Account state"
+          options={Enum.map(Account.states(), &{String.capitalize(&1), &1})}
+        />
+        <.input
+          field={@authorization_form[:platform_role]}
+          type="select"
+          label="Platform role"
+          options={Enum.map(Account.platform_roles(), &{String.capitalize(&1), &1})}
+        />
+        <.input
+          field={@authorization_form[:trust_tier]}
+          type="select"
+          label="Trust tier"
+          options={Enum.map(Account.trust_tiers(), &{String.capitalize(&1), &1})}
+        />
+      </div>
+
+      <div class={["flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between"]}>
+        <.link
+          id="admin-account-back"
+          navigate={~p"/admin"}
+          class={[
+            "font-mono text-xs uppercase tracking-[0.14em] text-ink-muted transition hover:text-ink"
+          ]}
+        >
+          ← Back to accounts
+        </.link>
+        <.button id="admin-authorization-save" variant="primary" phx-disable-with="Saving…">
+          Save authorization
+        </.button>
+      </div>
+    </.form>
+  </Layouts.page>
+</Layouts.app>

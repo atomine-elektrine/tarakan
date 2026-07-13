@@ -1,0 +1,124 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page id="admin-dashboard" class={["py-6 sm:py-10"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>admin</:crumb>
+    </.breadcrumbs>
+
+    <header class={[
+      "mt-4 flex flex-col gap-5 border-b-2 border-strong pb-7 sm:flex-row sm:items-end sm:justify-between"
+    ]}>
+      <div>
+        <p class={["font-mono text-[10px] uppercase tracking-[0.2em] text-signal"]}>
+          Platform control
+        </p>
+        <h1 class={["mt-2 font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-5xl"]}>
+          Administration
+        </h1>
+        <p class={["mt-3 max-w-2xl text-sm leading-6 text-ink-muted"]}>
+          Manage account standing and platform authority. Every change is re-authorized against locked database state and written to the audit record.
+        </p>
+      </div>
+      <.link
+        id="admin-moderation-link"
+        navigate={~p"/moderation/queue"}
+        class={[
+          "font-mono text-xs uppercase tracking-[0.14em] text-signal transition hover:underline"
+        ]}
+      >
+        Moderation queue →
+      </.link>
+    </header>
+
+    <section id="admin-summary" class={["mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"]}>
+      <%= for {id, label, value} <- [
+        {"total", "Accounts", @summary.total},
+        {"admins", "Administrators", @summary.admins},
+        {"moderators", "Moderators", @summary.moderators},
+        {"restricted", "Restricted", @summary.restricted}
+      ] do %>
+        <article id={"admin-summary-#{id}"} class={["border-2 border-strong bg-panel px-5 py-5"]}>
+          <p class={["font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint"]}>
+            {label}
+          </p>
+          <p class={["mt-2 font-display text-3xl text-ink"]}>{value}</p>
+        </article>
+      <% end %>
+    </section>
+
+    <section class={["mt-8"]} aria-labelledby="admin-accounts-heading">
+      <div class={["flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"]}>
+        <div>
+          <h2
+            id="admin-accounts-heading"
+            class={["font-display text-xl uppercase tracking-[0.06em] text-ink"]}
+          >
+            Accounts
+          </h2>
+          <p id="admin-account-count" class={["mt-1 font-mono text-[11px] text-ink-faint"]}>
+            {@account_count} shown · maximum 100
+          </p>
+        </div>
+
+        <.form
+          for={@filter_form}
+          id="admin-account-filter"
+          phx-change="filter"
+          class={["w-full sm:max-w-sm"]}
+        >
+          <.input
+            field={@filter_form[:query]}
+            type="search"
+            label="Search accounts"
+            placeholder="handle, email, or name"
+            autocomplete="off"
+            phx-debounce="250"
+          />
+        </.form>
+      </div>
+
+      <div id="admin-accounts" phx-update="stream" class={["mt-5 grid gap-3"]}>
+        <div
+          id="admin-accounts-empty"
+          class={[
+            "hidden border-2 border-rule px-5 py-10 text-center text-sm text-ink-muted only:block"
+          ]}
+        >
+          No accounts match that search.
+        </div>
+
+        <article
+          :for={{dom_id, account} <- @streams.accounts}
+          id={dom_id}
+          class={[
+            "group flex flex-col gap-4 border-2 border-strong bg-panel px-5 py-4 transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0_0_var(--color-rule)] sm:flex-row sm:items-center sm:justify-between"
+          ]}
+        >
+          <div class={["min-w-0"]}>
+            <div class={["flex flex-wrap items-center gap-2"]}>
+              <h3 class={["font-display text-lg text-ink"]}>@{account.handle}</h3>
+              <span class={[
+                "border border-rule px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted"
+              ]}>
+                {account.platform_role}
+              </span>
+              <span class={["font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint"]}>
+                {account.state} · {account.trust_tier}
+              </span>
+            </div>
+            <p class={["mt-1 truncate text-xs text-ink-faint"]}>{account.email}</p>
+          </div>
+          <.link
+            id={"admin-account-#{account.id}-manage"}
+            navigate={~p"/admin/accounts/#{account.id}"}
+            class={[
+              "shrink-0 font-mono text-xs uppercase tracking-[0.14em] text-signal transition group-hover:underline"
+            ]}
+          >
+            Manage →
+          </.link>
+        </article>
+      </div>
+    </section>
+  </Layouts.page>
+</Layouts.app>

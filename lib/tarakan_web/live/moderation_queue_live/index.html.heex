@@ -1,0 +1,74 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>moderation</:crumb>
+    </.breadcrumbs>
+
+    <main id="moderation-queue">
+      <header class="flex flex-wrap items-end justify-between gap-4 border-b-2 border-strong pb-6">
+        <div>
+          <h1 class="font-display text-3xl uppercase tracking-[0.06em] text-ink sm:text-4xl">
+            Moderation queue
+          </h1>
+          <p class="mt-3 max-w-2xl text-sm leading-6 text-ink-muted">
+            Restricted reports awaiting independent review.
+          </p>
+        </div>
+        <span id="moderation-case-count" class="font-mono text-xs text-ink-faint">
+          {@case_count} open
+        </span>
+      </header>
+
+      <div id="moderation-cases" phx-update="stream" class="mt-6 grid gap-4">
+        <div
+          id="moderation-cases-empty"
+          class="hidden border border-rule px-5 py-10 text-center text-sm text-ink-muted only:block"
+        >
+          No cases are waiting for review.
+        </div>
+
+        <article
+          :for={{dom_id, case_record} <- @streams.cases}
+          id={dom_id}
+          class="border-2 border-strong bg-panel px-5 py-5 sm:px-6"
+        >
+          <div class="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-center gap-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-faint">
+                <span>Case #{case_record.id}</span>
+                <span>{status_label(case_record.status)}</span>
+                <span>{subject_label(case_record.subject_type)} #{case_record.subject_id}</span>
+              </div>
+              <h2 class="mt-3 font-display text-lg uppercase tracking-[0.06em] text-ink">
+                {reason_label(case_record.reason)}
+              </h2>
+              <p class="mt-2 line-clamp-3 max-w-3xl whitespace-pre-line text-sm leading-6 text-ink-muted">
+                {case_record.description}
+              </p>
+            </div>
+
+            <div class="flex shrink-0 flex-wrap items-center gap-4">
+              <button
+                :if={can_assign?(case_record, @current_scope)}
+                id={"assign-moderation-case-#{case_record.id}"}
+                phx-click="assign"
+                phx-value-id={case_record.id}
+                class="clip-notch bg-btn px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90 phx-click-loading:opacity-60"
+              >
+                Assign
+              </button>
+              <.link
+                id={"view-moderation-case-#{case_record.id}"}
+                navigate={~p"/moderation/cases/#{case_record.id}"}
+                class="font-mono text-xs text-signal transition hover:underline"
+              >
+                View case
+              </.link>
+            </div>
+          </div>
+        </article>
+      </div>
+    </main>
+  </Layouts.page>
+</Layouts.app>

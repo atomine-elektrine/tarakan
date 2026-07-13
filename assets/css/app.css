@@ -1,0 +1,321 @@
+@import "tailwindcss" source(none);
+@import "phoenix-colocated/tarakan/colocated.css";
+@source "../css";
+@source "../js";
+@source "../../lib/tarakan_web";
+@source "../../_build/dev/phoenix-colocated/tarakan/*/";
+
+@plugin "../vendor/heroicons";
+
+@custom-variant phx-click-loading (.phx-click-loading&, .phx-click-loading &);
+@custom-variant phx-submit-loading (.phx-submit-loading&, .phx-submit-loading &);
+@custom-variant phx-change-loading (.phx-change-loading&, .phx-change-loading &);
+
+[data-phx-session],
+[data-phx-teleported-src] {
+  display: contents;
+}
+
+/* Tailwind's preflight leaves native buttons on the default arrow cursor.
+   Make the interaction contract consistent without repeating cursor utilities
+   on every component and LiveView action. */
+@layer base {
+  button:not(:disabled),
+  input:is([type="button"], [type="submit"], [type="reset"]):not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  input:is([type="button"], [type="submit"], [type="reset"]):disabled {
+    cursor: not-allowed;
+  }
+}
+
+/* Chakra Petch (400/500/700), latin subset, vendored in priv/static/fonts */
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/chakra-petch-latin-400.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/fonts/chakra-petch-latin-500.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Chakra Petch";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/fonts/chakra-petch-latin-700.woff2") format("woff2");
+}
+
+/* Tarakan color tokens.
+
+   Dark is the flagship: a night-shift terminal - blue-black ground, steel
+   frames, hot-magenta signal for findings, cyan phosphor for anything live.
+   Light is the same room with the lights on: cool grey-blue paper, navy ink,
+   the accents darkened to hold contrast, and every glow switched off. */
+:root {
+  --ground: #f6f7f9;
+  --panel: #eceef2;
+  --ink: #141c28;
+  --ink-muted: #47556a;
+  --ink-faint: #75818f;
+  --rule: #d6dae2;
+  --strong: #1b2534;
+  --signal: #b0135b;
+  --quote: #0d7a58;
+  --btn: #1b2534;
+  --btn-fg: #e8edf4;
+  /* The well is the surface live values sit on. Light keeps it visually flush
+     with the ground - a dark slab reads as a defect on paper - but it must be
+     an opaque paint, not transparent: wire-badge hollows fill with --well and
+     would otherwise expose the badge's own stroke color. Dark gets the true
+     phosphor treatment: recessed slab, scanlines, glow. */
+  --well: #f6f7f9;
+  --well-pad: 0;
+  --phosphor: #086e86;
+  --glow: none;
+  --glow-soft: none;
+  --scan: none;
+}
+
+/* Dark tokens apply via OS preference, and via the manual toggle
+   (data-theme). Keep the two dark blocks identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #070b12;
+    --panel: #0d1420;
+    --ink: #d7e1ef;
+    --ink-muted: #8493aa;
+    --ink-faint: #5a6980;
+    --rule: #182236;
+    --strong: #2b3b56;
+    --signal: #ff3d8f;
+    --quote: #43e6a8;
+    --btn: #3ed6f2;
+    --btn-fg: #04131c;
+    --well: #0a1119;
+    --well-pad: 0.75rem;
+    --phosphor: #45e0ff;
+    --glow: 0 0 14px color-mix(in srgb, var(--phosphor) 50%, transparent);
+    --glow-soft: 0 0 10px color-mix(in srgb, var(--phosphor) 35%, transparent);
+    --scan: repeating-linear-gradient(
+      0deg,
+      rgb(255 255 255 / 0.035) 0 1px,
+      transparent 1px 3px
+    );
+  }
+}
+
+:root[data-theme="dark"] {
+  --ground: #070b12;
+  --panel: #0d1420;
+  --ink: #d7e1ef;
+  --ink-muted: #8493aa;
+  --ink-faint: #5a6980;
+  --rule: #182236;
+  --strong: #2b3b56;
+  --signal: #ff3d8f;
+  --quote: #43e6a8;
+  --btn: #3ed6f2;
+  --btn-fg: #04131c;
+  --well: #0a1119;
+  --well-pad: 0.75rem;
+  --phosphor: #45e0ff;
+  --glow: 0 0 14px color-mix(in srgb, var(--phosphor) 50%, transparent);
+  --glow-soft: 0 0 10px color-mix(in srgb, var(--phosphor) 35%, transparent);
+  --scan: repeating-linear-gradient(
+    0deg,
+    rgb(255 255 255 / 0.035) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+:root[data-theme="light"] {
+  --ground: #f6f7f9;
+  --panel: #eceef2;
+  --ink: #141c28;
+  --ink-muted: #47556a;
+  --ink-faint: #75818f;
+  --rule: #d6dae2;
+  --strong: #1b2534;
+  --signal: #b0135b;
+  --quote: #0d7a58;
+  --btn: #1b2534;
+  --btn-fg: #e8edf4;
+  --well: #f6f7f9;
+  --well-pad: 0;
+  --phosphor: #086e86;
+  --glow: none;
+  --glow-soft: none;
+  --scan: none;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-strong: var(--strong);
+  --color-signal: var(--signal);
+  --color-quote: var(--quote);
+  --color-btn: var(--btn);
+  --color-btn-fg: var(--btn-fg);
+  --color-well: var(--well);
+  --color-phosphor: var(--phosphor);
+  --font-display: "Chakra Petch", "Arial", "Helvetica Neue", sans-serif;
+}
+
+@utility clip-notch {
+  /* Filled CTAs only (bg-btn etc.). Clip alone - solid fill defines the edge.
+     Outline badges must use .wire-badge instead (border + clip-path eats strokes). */
+  clip-path: polygon(
+    0 0,
+    calc(100% - 0.5rem) 0,
+    100% 0.5rem,
+    100% 100%,
+    0.5rem 100%,
+    0 calc(100% - 0.5rem)
+  );
+}
+
+@utility clip-notch-sm {
+  /* Filled small controls only. Outline badges: use .wire-badge. */
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 0 100%);
+}
+
+/* The newest wire entry sits on the well and reads in phosphor - the visible
+   proof that the record is live. Scanlines are part of the well surface and
+   disappear with it in light. Unlayered so it wins over utilities. */
+#activity-wire {
+  --wire-badge-fill: var(--ground);
+}
+
+#activity-wire article:first-of-type {
+  background-color: var(--well);
+  background-image: var(--scan);
+  /* Hollow badge interiors must match the well, not the page ground. */
+  --wire-badge-fill: var(--well);
+}
+
+#activity-wire article:first-of-type :is(span, time, a) {
+  color: var(--phosphor);
+  text-shadow: var(--glow-soft);
+}
+
+#activity-wire article:first-of-type .wire-badge {
+  text-shadow: none;
+}
+
+/* The newest shout gets the same live treatment as the wire's newest entry.
+   The log reads chronologically, so the newest message is the LAST article.
+   Only the provenance line (handle + time) glows - shout bodies are user
+   prose, not telemetry, and stay in ink. */
+#shoutbox-messages article:last-of-type {
+  background-color: var(--well);
+  background-image: var(--scan);
+}
+
+#shoutbox-messages article:last-of-type :is(time, a) {
+  color: var(--phosphor);
+  text-shadow: var(--glow-soft);
+}
+
+/* Default hole colour for outline notched badges. Override on non-ground
+   surfaces (e.g. #activity-wire article:first-of-type sets --well). */
+:root {
+  --wire-badge-fill: var(--ground);
+}
+
+.bg-panel {
+  --wire-badge-fill: var(--panel);
+}
+
+/* Notched badge with a continuous stroke (top + diagonal included).
+   Never use border + clip-path for outlines - clip-path eats the stroke.
+   Shell = currentColor; hole = --wire-badge-fill; label above. */
+.wire-badge {
+  --wire-notch: 5px;
+  --wire-stroke: 2px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  border: none !important;
+  background-color: currentColor;
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--wire-notch)) 0,
+    100% var(--wire-notch),
+    100% 100%,
+    0 100%
+  );
+  padding: var(--wire-stroke);
+  isolation: isolate;
+}
+
+.wire-badge::before {
+  content: "";
+  position: absolute;
+  inset: var(--wire-stroke);
+  z-index: 0;
+  pointer-events: none;
+  background: var(--wire-badge-fill, var(--ground));
+  clip-path: polygon(
+    0 0,
+    calc(100% - max(0px, var(--wire-notch) - var(--wire-stroke))) 0,
+    100% max(0px, var(--wire-notch) - var(--wire-stroke)),
+    100% 100%,
+    0 100%
+  );
+}
+
+.wire-badge-label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  padding-inline: 0.375rem;
+  padding-block: 0.125rem;
+  color: inherit;
+  line-height: 1.25;
+}
+
+/* Solid filled notched badges: slab only, no hollow. */
+.wire-badge.bg-ink {
+  background-color: var(--ink) !important;
+  color: var(--ground);
+}
+
+.wire-badge.bg-signal {
+  background-color: var(--signal) !important;
+  color: var(--ground);
+}
+
+.wire-badge.bg-btn {
+  background-color: var(--btn) !important;
+  color: var(--btn-fg);
+}
+
+.wire-badge.bg-ink::before,
+.wire-badge.bg-signal::before,
+.wire-badge.bg-btn::before {
+  display: none;
+}
+
+.wire-badge.bg-ink .wire-badge-label,
+.wire-badge.bg-signal .wire-badge-label {
+  color: var(--ground);
+}
+
+.wire-badge.bg-btn .wire-badge-label {
+  color: var(--btn-fg);
+}

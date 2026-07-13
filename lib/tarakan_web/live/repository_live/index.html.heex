@@ -1,0 +1,440 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <%!-- Hero: purpose and repository registration. --%>
+  <section class="border-b-2 border-strong">
+    <div class="mx-auto grid w-full max-w-[90rem] lg:grid-cols-[1.05fr_0.95fr]">
+      <div class="border-b-2 border-strong px-5 py-10 sm:px-8 sm:py-14 lg:border-b-0 lg:border-r-2">
+        <h1 class="font-display text-5xl font-medium uppercase leading-[1.02] tracking-[0.01em] text-ink sm:text-6xl lg:text-[4.5rem]">
+          All bugs<br /> <span class="text-signal">are shallow.</span>
+        </h1>
+
+        <p class="mt-6 max-w-md text-pretty text-sm leading-6 text-ink-muted sm:text-base sm:leading-7">
+          Tarakan is collective security auditing for open source. Contributors and their agents
+          review the same commits and check each other's work. All of it stays public.
+        </p>
+
+        <div
+          :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
+          id="repository-auth-gate"
+          class="mt-9"
+        >
+          <.link
+            id="account-login-button"
+            href={~p"/auth/github?return_to=/"}
+            class="clip-notch inline-flex items-center justify-center gap-3 bg-btn px-6 py-3.5 font-display text-sm uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
+          >
+            Create an account or sign in
+          </.link>
+        </div>
+      </div>
+
+      <div id="registry-shoutbox" class="flex min-h-[22rem] flex-col">
+        <div class="flex items-center justify-between gap-3 border-b border-rule bg-panel px-5 py-3 sm:px-6">
+          <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+            Shoutbox
+          </p>
+          <span class="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            <span class="size-1.5 rounded-full bg-phosphor"></span>
+            <span><span class="text-phosphor">{@observer_count}</span> here</span>
+          </span>
+        </div>
+
+        <%!-- The absolute inner keeps message history out of the grid's height
+              math: the column tracks the hero cell, never the backlog. --%>
+        <div id="shoutbox-messages" class="relative min-h-0 flex-1">
+          <div
+            id="shoutbox-scroll"
+            phx-hook="PinToBottom"
+            class="absolute inset-0 divide-y divide-rule overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+          >
+            <div
+              :if={@shouts == []}
+              id="shoutbox-empty"
+              class="flex min-h-full flex-col items-center justify-center px-5 py-12 text-center sm:px-6"
+            >
+              <p class="text-sm text-ink-muted">It is quiet in here.</p>
+              <p class="mt-1 font-mono text-[10px] text-ink-faint">Start the conversation.</p>
+            </div>
+
+            <article :for={shout <- @shouts} id={"shout-#{shout.id}"} class="px-5 py-3 sm:px-6">
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <.handle_link
+                  handle={shout.account.handle}
+                  class="font-mono text-[11px] font-semibold"
+                />
+                <time
+                  datetime={DateTime.to_iso8601(shout.inserted_at)}
+                  class="font-mono text-[9px] text-ink-faint"
+                >
+                  {shout_time(shout.inserted_at)}
+                </time>
+                <button
+                  :if={@can_moderate_shouts && is_nil(shout.removed_at)}
+                  type="button"
+                  phx-click="remove_shout"
+                  phx-value-id={shout.id}
+                  data-confirm="Remove this shout from public view?"
+                  class="ml-auto font-mono text-[9px] uppercase tracking-[0.12em] text-ink-faint transition hover:text-signal"
+                >
+                  Remove
+                </button>
+              </div>
+              <p
+                :if={is_nil(shout.removed_at)}
+                class="mt-1 whitespace-pre-line text-xs leading-5 text-ink-muted"
+                phx-no-format
+              >{shout.body}</p>
+              <p :if={shout.removed_at} class="mt-1 text-xs italic text-ink-faint">
+                Removed by moderation.
+              </p>
+            </article>
+          </div>
+        </div>
+
+        <.form
+          :if={@current_scope && @current_scope.account}
+          for={@shout_form}
+          id="shoutbox-form"
+          phx-submit="post_shout"
+          class="grid grid-cols-[minmax(0,1fr)_auto] border-t border-rule bg-panel transition-colors focus-within:border-phosphor"
+        >
+          <.input
+            field={@shout_form[:body]}
+            id={"shoutbox-body-#{@shout_form_version}"}
+            type="text"
+            maxlength="280"
+            required
+            hide_errors
+            autocomplete="off"
+            phx-mounted={@shout_form_version > 0 && JS.focus()}
+            placeholder="Message the registry…"
+            class="h-11 w-full border-0 bg-transparent px-4 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-0"
+          />
+          <button class="border-l border-rule bg-btn px-4 font-display text-[10px] uppercase tracking-[0.16em] text-btn-fg transition hover:opacity-90">
+            Send
+          </button>
+        </.form>
+
+        <div
+          :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
+          class="border-t border-rule bg-panel px-5 py-3 sm:px-6"
+        >
+          <.link
+            navigate={~p"/accounts/log-in"}
+            class="font-mono text-[10px] text-ink-muted underline decoration-rule underline-offset-2 transition hover:text-ink"
+          >
+            Sign in to join the shoutbox
+          </.link>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%!-- Registry state: live aggregates --%>
+  <section id="registry-stats" class="border-b-2 border-strong">
+    <div class="mx-auto grid w-full max-w-[90rem] grid-cols-2 lg:grid-cols-5">
+      <div class="border-b border-r border-rule px-5 py-8 sm:px-8 lg:border-b-0">
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          Repositories
+        </p>
+        <p
+          id="repository-count"
+          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+        >
+          {@stats.repositories}
+        </p>
+      </div>
+      <div class="border-b border-rule px-5 py-8 sm:px-8 lg:border-b-0 lg:border-r">
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          Awaiting first review
+        </p>
+        <p
+          id="unscanned-count"
+          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-signal"
+        >
+          {@stats.unscanned}
+        </p>
+      </div>
+      <div class="border-b border-r border-rule px-5 py-8 sm:px-8 lg:border-b-0">
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          Contributors
+        </p>
+        <p
+          id="contributor-count"
+          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+        >
+          {@contributor_count}
+        </p>
+      </div>
+      <div class="border-b border-rule px-5 py-8 sm:px-8 lg:border-b-0 lg:border-r">
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          Verified findings
+        </p>
+        <p
+          id="verified-findings-count"
+          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+        >
+          {@stats.verified_findings}
+        </p>
+      </div>
+      <div class="px-5 py-8 sm:px-8">
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          Online
+        </p>
+        <p
+          id="observer-count"
+          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-phosphor"
+        >
+          {@observer_count}
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <%!-- Registry search: find a repository's public record. --%>
+  <section id="repository-search" class="border-b-2 border-strong">
+    <div class="mx-auto w-full max-w-[90rem]">
+      <form id="repository-search-form" phx-change="search" phx-submit="search">
+        <label
+          for="repository-search-input"
+          class="group flex cursor-text items-center gap-3 px-5 sm:px-8"
+        >
+          <span
+            aria-hidden="true"
+            class="select-none font-mono text-sm text-ink-faint transition group-focus-within:text-phosphor"
+          >
+            &gt;
+          </span>
+          <input
+            id="repository-search-input"
+            type="text"
+            name="q"
+            value={@search_query}
+            autocomplete="off"
+            placeholder="search the registry — owner/name"
+            phx-debounce="200"
+            phx-hook="SearchShortcut"
+            class="h-14 w-full border-0 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-0"
+          />
+          <kbd class="hidden shrink-0 border border-rule px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:block">
+            /
+          </kbd>
+        </label>
+      </form>
+
+      <div
+        :if={@search_query != ""}
+        id="repository-search-results"
+        class="border-t border-rule"
+      >
+        <p
+          :if={@search_results == []}
+          class="px-5 py-6 font-mono text-xs text-ink-faint sm:px-8"
+        >
+          No repositories match “{@search_query}”.
+        </p>
+
+        <ol :if={@search_results != []} class="divide-y divide-rule">
+          <li :for={repository <- @search_results}>
+            <.link
+              id={"search-result-#{repository.id}"}
+              navigate={TarakanWeb.RepositoryPaths.repository_path(repository)}
+              class="group flex items-baseline gap-3 px-5 py-2.5 font-mono text-xs transition-colors hover:bg-panel sm:px-8"
+            >
+              <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
+                {repository.owner}/{repository.name}
+              </span>
+              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+                <span :if={repository.primary_language}>
+                  {repository.primary_language} ·
+                </span>
+                ★ {compact_stars(repository.stars_count)} · {Calendar.strftime(
+                  repository.inserted_at,
+                  "%Y-%m-%d"
+                )}
+              </span>
+            </.link>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <%!-- Open work: unreviewed repositories and explicitly requested jobs. --%>
+  <section id="work-queue" class="border-b-2 border-strong">
+    <div class="mx-auto w-full max-w-[90rem] px-5 py-10 sm:px-8 sm:py-14">
+      <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+            Contribute
+          </p>
+          <h2 class="mt-2 font-display text-3xl font-medium uppercase leading-none tracking-[0.03em] text-ink sm:text-4xl">
+            Open work
+          </h2>
+          <p class="mt-3 max-w-xl text-sm leading-6 text-ink-muted">
+            Review a repository that has not been covered yet, or claim a job tied to a specific commit.
+          </p>
+        </div>
+        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          {length(@scan_queue)} to review · {length(@open_tasks)} open {if length(@open_tasks) ==
+                                                                             1,
+                                                                           do: "job",
+                                                                           else: "jobs"}
+        </p>
+      </div>
+
+      <div class="block">
+        <div class="grid min-w-0 border-2 border-strong lg:grid-cols-[minmax(0,1.35fr)_minmax(19rem,0.65fr)]">
+          <div id="scan-queue" class="min-w-0 lg:border-r-2 lg:border-strong">
+            <div class="border-b border-rule bg-panel px-5 py-4 sm:px-6">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h3 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+                  Repositories to review
+                </h3>
+                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                  Recently added
+                </span>
+              </div>
+              <p class="mt-1.5 text-xs leading-5 text-ink-muted">
+                These public repositories do not have a submitted review yet. Choose one and review a pinned commit.
+              </p>
+            </div>
+
+            <div :if={@scan_queue == []} class="px-5 py-10 sm:px-6">
+              <p class="text-sm font-medium text-ink">
+                Every registered repository has a review.
+              </p>
+              <p class="mt-1 text-xs leading-5 text-ink-faint">
+                New registrations will appear here automatically.
+              </p>
+            </div>
+
+            <ol :if={@scan_queue != []} class="divide-y divide-rule">
+              <li :for={{repository, position} <- Enum.with_index(@scan_queue, 1)}>
+                <.link
+                  id={"scan-queue-#{repository.id}"}
+                  navigate={TarakanWeb.RepositoryPaths.repository_path(repository)}
+                  class="group grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 px-5 py-4 transition-colors hover:bg-panel sm:px-6"
+                >
+                  <span class="font-mono text-[10px] tabular-nums text-ink-faint">
+                    {String.pad_leading(Integer.to_string(position), 2, "0")}
+                  </span>
+                  <div class="min-w-0">
+                    <p class="truncate text-sm font-semibold text-ink">
+                      {repository.owner}/<span class="font-bold">{repository.name}</span>
+                    </p>
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                      <span :if={repository.primary_language}>{repository.primary_language}</span>
+                      <span :if={repository.primary_language} aria-hidden="true">·</span>
+                      <span>★ {compact_stars(repository.stars_count || 0)}</span>
+                      <span aria-hidden="true">·</span>
+                      <span>Registered {Calendar.strftime(repository.inserted_at, "%b %-d, %Y")}</span>
+                    </p>
+                  </div>
+                  <.icon
+                    name="hero-arrow-right-mini"
+                    class="size-3.5 text-ink-faint transition group-hover:text-ink"
+                  />
+                </.link>
+              </li>
+            </ol>
+
+            <div class="border-t border-rule px-5 py-3 sm:px-6">
+              <p class="break-all font-mono text-[10px] text-ink-faint">
+                <span class="uppercase tracking-[0.14em]">API</span>
+                <span class="mx-1.5">·</span> GET /api/repositories?status=unscanned
+              </p>
+            </div>
+          </div>
+
+          <aside id="open-review-work" class="border-t-2 border-strong lg:border-t-0">
+            <div class="border-b border-rule bg-panel px-5 py-4 sm:px-6">
+              <h3 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+                Open jobs
+              </h3>
+              <p class="mt-1.5 text-xs leading-5 text-ink-muted">
+                Community requests tied to a specific commit and review goal.
+              </p>
+            </div>
+
+            <div :if={@open_tasks == []} class="px-5 py-10 sm:px-6 lg:py-12">
+              <p class="text-sm font-medium text-ink">No jobs are open right now.</p>
+              <p class="mt-2 max-w-sm text-xs leading-5 text-ink-faint">
+                You can still choose any repository listed here and submit a review.
+              </p>
+            </div>
+
+            <ul :if={@open_tasks != []} class="divide-y divide-rule">
+              <li :for={task <- @open_tasks}>
+                <.link
+                  id={"open-task-#{task.id}"}
+                  navigate={~p"/work/#{task.id}"}
+                  class="group block px-5 py-4 transition-colors hover:bg-panel sm:px-6"
+                >
+                  <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+                    {task.repository.owner}/{task.repository.name}
+                    <span class="mx-1">·</span>
+                    <span title={task.commit_sha}>{String.slice(task.commit_sha, 0, 7)}</span>
+                  </p>
+                  <p class="mt-2 text-sm font-semibold leading-5 text-ink">
+                    {task.title}
+                  </p>
+                  <p class="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                    {review_kind_label(task.kind)} · {provenance_label(task.capability)} required
+                  </p>
+                </.link>
+              </li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%!-- A concise explanation of the public record. --%>
+  <section id="how-it-works" class="border-b-2 border-strong bg-panel">
+    <div class="mx-auto grid w-full max-w-[90rem] gap-10 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[minmax(16rem,0.72fr)_minmax(0,1.28fr)] lg:gap-16">
+      <div>
+        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+          How Tarakan works
+        </p>
+        <h2 class="mt-3 max-w-md font-display text-4xl font-medium uppercase leading-[1.05] tracking-[0.02em] text-ink sm:text-5xl">
+          Distributed reviews.<br /> One trusted record.
+        </h2>
+        <p class="mt-5 max-w-md text-sm leading-6 text-ink-muted">
+          The web app coordinates open work. The Tarakan client runs your chosen reviewer on your machine and submits structured evidence tied to an exact commit.
+        </p>
+        <div class="mt-6 max-w-md border-l-2 border-strong pl-4">
+          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            Claim work with the client
+          </p>
+          <code class="mt-2 block break-all font-mono text-xs text-ink">
+            tarakan --agent codex --pickup
+          </code>
+          <p class="mt-2 text-xs leading-5 text-ink-faint">
+            Codex, Claude, Grok, Ollama, and OpenRouter are supported. Provider credentials stay with the local tool.
+          </p>
+        </div>
+      </div>
+
+      <dl class="border-t-2 border-strong">
+        <%= for {title, body} <- [
+          {"Work comes from the crowd",
+           "Anyone can register a public repository, choose one awaiting review, or publish a commit-specific job. No maintainer invitation is required."},
+          {"Agents review independently",
+           "The client pins the commit, records the model and provenance, and runs a blind first pass before showing the agent any existing findings."},
+          {"Overlapping reports converge",
+           "Many contributors can review the same code with different agents. Their reports stay intact while exact repeats join one canonical issue."},
+          {"Verification stays separate",
+           "Other contributors reproduce or dispute the finding. Agent checks add corroboration, but only qualified human or hybrid checks establish quorum."}
+        ] do %>
+          <div class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(10rem,0.55fr)_minmax(0,1fr)] sm:gap-8">
+            <dt class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+              {title}
+            </dt>
+            <dd class="max-w-xl text-sm leading-6 text-ink-muted">{body}</dd>
+          </div>
+        <% end %>
+      </dl>
+    </div>
+  </section>
+</Layouts.app>

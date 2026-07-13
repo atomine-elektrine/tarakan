@@ -1,0 +1,229 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-6 sm:py-8"]}>
+    <.breadcrumbs id="explore-breadcrumb">
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>explore</:crumb>
+    </.breadcrumbs>
+
+    <div class="flex flex-col gap-3 border-b-2 border-strong pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="font-display text-3xl font-medium uppercase tracking-[0.04em] text-ink sm:text-4xl">
+          Explore
+        </h1>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
+          Registrations, reviews, verdicts, and discussion as they hit the public record.
+        </p>
+      </div>
+
+      <div class="flex flex-col items-start gap-2 sm:items-end">
+        <span
+          id="explore-watchers"
+          class="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint"
+        >
+          <span class="size-1.5 rounded-full bg-phosphor"></span>
+          <span><span class="text-phosphor">{@watcher_count}</span> watching</span>
+        </span>
+        <div
+          id="explore-filter"
+          class="flex flex-wrap border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em]"
+          role="group"
+          aria-label="Filter by kind"
+        >
+          <button
+            :for={
+              {value, label} <- [
+                {"all", "Everything"},
+                {"registrations", "Registrations"},
+                {"reviews", "Reviews"},
+                {"verdicts", "Verdicts"},
+                {"comments", "Comments"}
+              ]
+            }
+            type="button"
+            phx-click="filter"
+            phx-value-kind={value}
+            aria-pressed={to_string(@kind == value)}
+            class={[
+              "px-3 py-1.5 transition",
+              @kind == value && "bg-btn text-btn-fg",
+              @kind != value && "text-ink-faint hover:text-ink"
+            ]}
+          >
+            {label}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-6 grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(15rem,0.32fr)]">
+      <section class="min-w-0">
+        <form id="explore-search-form" phx-change="search" phx-submit="search">
+          <label
+            for="explore-search-input"
+            class="group flex cursor-text items-center gap-3 border-b border-rule px-3 sm:px-4"
+          >
+            <span
+              aria-hidden="true"
+              class="select-none font-mono text-sm text-ink-faint transition group-focus-within:text-phosphor"
+            >
+              &gt;
+            </span>
+            <input
+              id="explore-search-input"
+              type="text"
+              name="q"
+              value={@query}
+              autocomplete="off"
+              placeholder="search the wire — handle or repository"
+              phx-debounce="200"
+              phx-hook="SearchShortcut"
+              class="h-12 w-full border-0 bg-transparent font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus:ring-0"
+            />
+            <kbd class="hidden shrink-0 border border-rule px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:block">
+              /
+            </kbd>
+          </label>
+        </form>
+
+        <div id="activity-wire" phx-update="stream" class="divide-y divide-rule font-mono text-xs">
+          <div
+            id="activity-wire-empty"
+            class="hidden px-3 py-16 text-center text-ink-faint only:block sm:px-4"
+          >
+            Nothing on the record matches this view yet.
+          </div>
+          <article
+            :for={{id, entry} <- @streams.wire}
+            id={id}
+            class="flex items-baseline gap-x-3 px-3 py-3 transition-colors hover:bg-panel sm:px-4"
+          >
+            <span class="shrink-0 text-[10px] tabular-nums text-ink-faint">
+              {ledger_time(entry.at)}
+            </span>
+            <span :if={entry.kind == :registration} class="min-w-0 truncate text-ink-muted">
+              <span class="text-ink-faint">registered</span>
+              <.link
+                navigate={wire_entry_path(entry)}
+                class="transition hover:text-ink hover:underline"
+              >
+                {entry.host}/{entry.owner}/{entry.name}
+              </.link>
+            </span>
+            <span :if={entry.kind == :scan} class="min-w-0 truncate text-ink-muted">
+              <.handle_link handle={entry.handle} class="font-semibold" />
+              <span class="text-ink-faint">reviewed</span>
+              <.link
+                navigate={wire_entry_path(entry)}
+                class="transition hover:text-ink hover:underline"
+              >
+                {entry.owner}/{entry.name}
+              </.link>
+              <span class="text-ink-faint">
+                {String.downcase(provenance_label(entry.provenance))} · {String.slice(
+                  entry.commit_sha,
+                  0,
+                  7
+                )}
+              </span>
+            </span>
+            <span :if={entry.kind == :verdict} class="min-w-0 truncate text-ink-muted">
+              <.handle_link handle={entry.handle} class="font-semibold" />
+              <span class="text-ink-faint">{entry.verdict} a review of</span>
+              <.link
+                navigate={wire_entry_path(entry)}
+                class="transition hover:text-ink hover:underline"
+              >
+                {entry.owner}/{entry.name}
+              </.link>
+            </span>
+            <span :if={entry.kind == :comment} class="min-w-0 truncate text-ink-muted">
+              <.handle_link handle={entry.handle} class="font-semibold" />
+              <span class="text-ink-faint">commented on</span>
+              <.link
+                navigate={wire_entry_path(entry)}
+                class="transition hover:text-ink hover:underline"
+              >
+                {entry.finding_title || "a finding"}
+              </.link>
+              <span class="text-ink-faint">in {entry.owner}/{entry.name}</span>
+            </span>
+            <span class="ml-auto shrink-0">
+              <span :if={entry.kind == :registration} class="text-[10px] text-ink-faint">
+                <span :if={entry.language}>{entry.language} · </span>★ {compact_stars(
+                  entry.stars_count
+                )}
+              </span>
+              <.link :if={entry.kind == :scan} navigate={wire_entry_path(entry)}>
+                <.notch_badge
+                  :if={entry.findings_count == 0 and entry.review_kind == "code_review"}
+                  class="text-ink-muted"
+                >
+                  No findings reported
+                </.notch_badge>
+                <.notch_badge
+                  :if={entry.findings_count == 0 and entry.review_kind != "code_review"}
+                  class="text-ink-muted"
+                >
+                  Reviewed
+                </.notch_badge>
+                <.notch_badge :if={entry.findings_count > 0} class="text-signal">
+                  {entry.findings_count}
+                  {if entry.findings_count == 1, do: "finding", else: "findings"}
+                </.notch_badge>
+              </.link>
+              <.link :if={entry.kind == :verdict} navigate={wire_entry_path(entry)}>
+                <.notch_badge
+                  :if={entry.verdict == "confirmed" and entry.scan_verified}
+                  class="bg-ink text-ground"
+                >
+                  Verified
+                </.notch_badge>
+                <.notch_badge :if={entry.verdict == "disputed"} class="text-signal">
+                  Disputed
+                </.notch_badge>
+              </.link>
+            </span>
+          </article>
+        </div>
+      </section>
+
+      <aside id="hot-findings">
+        <div class="flex items-baseline justify-between gap-3 border-b-2 border-strong px-3 pb-3">
+          <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+            Hot findings
+          </h2>
+          <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            Last 7 days
+          </span>
+        </div>
+
+        <p :if={@hot_findings == []} class="px-3 py-8 font-mono text-xs text-ink-faint">
+          No findings upvoted this week.
+        </p>
+
+        <ol :if={@hot_findings != []} class="divide-y divide-rule">
+          <li :for={finding <- @hot_findings}>
+            <.link
+              id={"hot-finding-#{finding.id}"}
+              navigate={~p"/findings/#{finding.public_id}"}
+              class="group flex items-baseline gap-4 px-3 py-4 transition-colors hover:bg-panel"
+            >
+              <span class="shrink-0 font-mono text-xs tabular-nums text-phosphor">
+                +{finding.score}
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold leading-5 text-ink transition group-hover:underline">
+                  {finding.title}
+                </span>
+                <span class="mt-1.5 block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                  {finding.owner}/{finding.name}
+                  <span :if={finding.severity}> · {finding.severity}</span>
+                </span>
+              </span>
+            </.link>
+          </li>
+        </ol>
+      </aside>
+    </div>
+  </Layouts.page>
+</Layouts.app>

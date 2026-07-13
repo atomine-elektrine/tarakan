@@ -1,0 +1,321 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.repository_header repository={@repository} active_tab={:code} />
+
+    <section
+      id="code-reference"
+      class="mt-5 flex flex-col gap-3 rounded-md border border-rule bg-panel px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <span class="inline-flex items-center gap-2 rounded-md border border-rule bg-ground px-3 py-1.5 font-mono text-[11px] text-ink">
+          <.icon name="hero-code-bracket" class="size-3.5 text-ink-faint" />
+          {@repository.default_branch || "default"}
+        </span>
+        <span class="text-ink-faint" aria-hidden="true">·</span>
+        <span
+          id="code-commit-sha"
+          class="font-mono text-[11px] text-ink-muted"
+          title={@commit_sha}
+        >
+          <.icon name="hero-clock" class="mr-1 inline size-3.5" />
+          {if @commit_sha, do: short_sha(@commit_sha), else: "Resolving commit"}
+        </span>
+      </div>
+      <div class="flex items-center gap-3 font-mono text-[10px] text-ink-faint">
+        <.link
+          :if={@visible_finding_count > 0}
+          navigate={repository_security_path(@repository)}
+          class="inline-flex items-center gap-1.5 text-signal"
+        >
+          <.icon name="hero-shield-exclamation" class="size-3.5" />
+          {@visible_finding_count} {if @visible_finding_count == 1,
+            do: "finding",
+            else: "findings"}
+        </.link>
+        <span>{if @clone_urls, do: "Hosted on Tarakan", else: "Read-only"}</span>
+      </div>
+    </section>
+
+    <section
+      :if={@clone_urls}
+      id="clone-urls"
+      class="mt-3 flex flex-col gap-2 rounded-md border border-rule bg-panel px-3 py-2.5"
+    >
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">https</span>
+        <code id="clone-url-https" class="break-all font-mono text-[11px] text-ink">
+          {@clone_urls.https}
+        </code>
+      </div>
+      <div :if={@clone_urls.ssh} class="flex min-w-0 flex-wrap items-center gap-2">
+        <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">ssh</span>
+        <code id="clone-url-ssh" class="break-all font-mono text-[11px] text-ink">
+          {@clone_urls.ssh}
+        </code>
+      </div>
+    </section>
+
+    <section
+      :if={@finding}
+      id="finding-code-context"
+      class="mt-4 border-l-4 border-signal bg-panel px-4 py-3"
+    >
+      <p class="font-mono text-[9px] uppercase tracking-[0.18em] text-signal">
+        Authorized finding context
+      </p>
+      <p class="mt-1 text-sm font-semibold text-ink">{@finding.title}</p>
+      <p class="mt-1 text-xs leading-5 text-ink-muted">
+        Tarakan checks the finding's stored file and line range against this exact commit.
+      </p>
+    </section>
+
+    <%= if @commit_sha do %>
+      <nav
+        id="source-breadcrumbs"
+        class="mt-4 flex min-w-0 flex-wrap items-center gap-1 rounded-t-md border border-b-0 border-rule bg-ground px-4 py-3 font-mono text-xs"
+        aria-label="Source path"
+      >
+        <%= if @live_action == :finding do %>
+          <span class="text-ink-muted">{@repository.name}</span>
+        <% else %>
+          <.link
+            navigate={code_path(@repository, @commit_sha, [])}
+            class="text-ink-muted transition hover:text-signal"
+          >
+            {@repository.name}
+          </.link>
+        <% end %>
+        <%= for item <- breadcrumb_items(@path_segments) do %>
+          <span class="text-ink-faint" aria-hidden="true">/</span>
+          <%= if @live_action == :finding do %>
+            <span class="break-all text-ink">{item.name}</span>
+          <% else %>
+            <.link
+              navigate={breadcrumb_path(@repository, @commit_sha, item.segments)}
+              class="break-all text-ink-muted transition hover:text-signal"
+            >
+              {item.name}
+            </.link>
+          <% end %>
+        <% end %>
+      </nav>
+    <% end %>
+
+    <div
+      :if={@view_state == :loading}
+      id="code-browser-loading"
+      class="border border-rule px-5 py-8 text-center"
+      aria-live="polite"
+    >
+      <.icon name="hero-arrow-path" class="mx-auto size-5 text-ink-faint" />
+      <p class="mt-4 font-display text-sm uppercase tracking-[0.16em] text-ink">
+        Loading pinned source
+      </p>
+      <p class="mx-auto mt-2 max-w-md text-xs leading-5 text-ink-faint">
+        Tarakan is verifying the public repository and exact commit before rendering code.
+      </p>
+    </div>
+
+    <section
+      :if={@view_state == :error}
+      id="code-browser-error"
+      class="border border-rule px-6 py-8 text-center"
+      aria-live="polite"
+    >
+      <.icon name="hero-document-magnifying-glass" class="mx-auto size-7 text-ink-faint" />
+      <h2 class="mt-4 font-display text-lg uppercase tracking-[0.12em] text-ink">
+        {error_title(@error_kind)}
+      </h2>
+      <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-ink-muted">
+        {error_message(@error_kind)}
+      </p>
+      <div
+        :if={@error_kind == :empty_repository && @clone_urls}
+        id="empty-repository-push-hint"
+        class="mx-auto mt-5 max-w-lg border border-rule bg-ground px-4 py-3 text-left"
+      >
+        <pre class="overflow-x-auto font-mono text-[11px] leading-5 text-ink"><code>git remote add origin {@clone_urls.https}
+git push -u origin main</code></pre>
+      </div>
+      <button
+        :if={@error_kind in [:rate_limited, :unavailable]}
+        id="retry-code-browser"
+        type="button"
+        phx-click="retry"
+        class="mt-5 border-2 border-strong px-4 py-2 font-display text-xs uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+      >
+        Retry
+      </button>
+    </section>
+
+    <%= if @view_state == :ready && @browser_kind == :tree do %>
+      <section id="code-tree" class="overflow-hidden rounded-b-md border border-rule">
+        <header class="flex items-center justify-between gap-4 border-b border-rule bg-panel px-4 py-3">
+          <div class="flex min-w-0 items-center gap-2">
+            <.icon name="hero-folder-open" class="size-4 shrink-0 text-ink-faint" />
+            <h2 class="truncate font-mono text-xs text-ink">
+              {if @path == "", do: "/", else: @path}
+            </h2>
+          </div>
+          <span class="shrink-0 font-mono text-[10px] text-ink-faint">
+            {@entry_count} {if @entry_count == 1, do: "entry", else: "entries"}
+          </span>
+        </header>
+
+        <div id="code-tree-entries" phx-update="stream" class="divide-y divide-rule">
+          <div
+            id="code-tree-empty"
+            class="hidden px-6 py-6 text-center text-sm text-ink-faint only:block"
+          >
+            This directory is empty at the pinned commit.
+          </div>
+          <div
+            :for={{id, entry} <- @streams.entries}
+            id={id}
+            class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-4 py-2.5 text-sm transition-colors hover:bg-panel"
+          >
+            <%= if entry.type in [:tree, :blob] do %>
+              <.link
+                navigate={entry_path(@repository, @commit_sha, entry)}
+                class="flex min-w-0 items-center gap-3 text-ink transition hover:text-signal"
+              >
+                <.icon name={entry_icon(entry.type)} class="size-4 shrink-0 text-ink-faint" />
+                <span class="truncate font-mono text-xs">{entry.name}</span>
+              </.link>
+            <% else %>
+              <div class="flex min-w-0 items-center gap-3 text-ink-muted">
+                <.icon name={entry_icon(entry.type)} class="size-4 shrink-0 text-ink-faint" />
+                <span class="truncate font-mono text-xs">{entry.name}</span>
+                <span class="font-mono text-[9px] uppercase tracking-[0.12em] text-ink-faint">
+                  {entry_label(entry.type)}
+                </span>
+              </div>
+            <% end %>
+            <div class="flex items-center justify-end gap-3">
+              <.link
+                :if={entry.finding_count > 0}
+                id={"#{id}-findings"}
+                navigate={repository_security_path(@repository)}
+                class="inline-flex items-center gap-1 rounded-full border border-signal px-2 py-0.5 font-mono text-[9px] font-semibold text-signal"
+                aria-label={"View security findings affecting #{entry.path}"}
+              >
+                <.icon name="hero-shield-exclamation" class="size-3" />
+                {entry.finding_count}
+                <span class="hidden sm:inline">
+                  {if entry.finding_count == 1, do: "finding", else: "findings"}
+                </span>
+              </.link>
+              <span class="min-w-14 text-right font-mono text-[10px] tabular-nums text-ink-faint">
+                {format_bytes(entry.size)}
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+    <% end %>
+
+    <%= if @view_state == :ready && @browser_kind == :file do %>
+      <section id="code-file" class="overflow-hidden rounded-b-md border border-rule">
+        <header class="flex flex-col gap-2 border-b border-rule bg-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div class="flex min-w-0 items-center gap-2">
+            <.icon name="hero-document-text" class="size-4 shrink-0 text-ink-faint" />
+            <h2 class="truncate font-mono text-xs text-ink" title={@file.path}>
+              {@file.path}
+            </h2>
+          </div>
+          <div class="flex shrink-0 items-center gap-3 font-mono text-[10px] text-ink-faint">
+            <.link
+              :if={@visible_finding_count > 0}
+              navigate={repository_security_path(@repository)}
+              class="inline-flex items-center gap-1 rounded-full border border-signal px-2 py-0.5 text-signal"
+            >
+              <.icon name="hero-shield-exclamation" class="size-3" />
+              {@visible_finding_count} {if @visible_finding_count == 1,
+                do: "finding",
+                else: "findings"}
+            </.link>
+            <span>{@line_count} {if @line_count == 1, do: "line", else: "lines"}</span>
+            <span>{format_bytes(@file.size)}</span>
+          </div>
+        </header>
+
+        <div
+          :if={@line_range_invalid?}
+          id="invalid-line-selection"
+          class="border-b border-rule px-4 py-2 text-xs text-ink-muted"
+        >
+          The requested line selection was invalid, so no lines are highlighted.
+        </div>
+
+        <div
+          :if={@line_range_outside_file?}
+          id="finding-line-outside-file"
+          class="border-b border-rule px-4 py-2 text-xs text-ink-muted"
+        >
+          The reported line range is outside this file at the pinned commit.
+        </div>
+
+        <div
+          :if={@suspicious_controls?}
+          id="source-control-warning"
+          class="border-b-2 border-signal px-4 py-3 text-xs leading-5 text-ink"
+          role="alert"
+        >
+          This file contains bidirectional text controls or NUL bytes. Tarakan preserves and renders
+          the source as plain text; inspect it carefully.
+        </div>
+
+        <div
+          :if={@line_count == 0}
+          id="code-file-empty"
+          class="px-6 py-6 text-center text-sm text-ink-faint"
+        >
+          This file is empty at the pinned commit.
+        </div>
+
+        <div :if={@line_count > 0} class="overflow-x-auto">
+          <table class="w-full border-collapse font-mono text-xs leading-5">
+            <tbody id="code-lines" phx-update="stream">
+              <tr
+                :for={{id, line} <- @streams.lines}
+                id={id}
+                class={[
+                  "group scroll-mt-24 align-top",
+                  line.highlighted? && "bg-panel"
+                ]}
+              >
+                <th
+                  scope="row"
+                  class={[
+                    "sticky left-0 w-px select-none border-r border-rule bg-ground px-3 py-0 text-right font-normal tabular-nums text-ink-faint",
+                    line.highlighted? && "border-l-4 border-l-signal bg-panel text-ink"
+                  ]}
+                >
+                  <a
+                    href={
+                      line_path(
+                        @live_action,
+                        @finding_ref,
+                        @repository,
+                        @commit_sha,
+                        @path_segments,
+                        line.number
+                      )
+                    }
+                    class="block min-w-8 transition group-hover:text-signal"
+                    aria-label={"Select line #{line.number}"}
+                  >
+                    {line.number}
+                  </a>
+                </th>
+                <td class="w-full py-0 pl-4 pr-8 text-ink">
+                  <code class="block min-h-5 whitespace-pre">{line.content}</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% end %>
+  </Layouts.page>
+</Layouts.app>

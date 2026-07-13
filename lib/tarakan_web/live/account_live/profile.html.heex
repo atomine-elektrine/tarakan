@@ -1,0 +1,166 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-6 sm:py-8"]}>
+    <.breadcrumbs id="profile-breadcrumb">
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>@{@account.handle}</:crumb>
+    </.breadcrumbs>
+
+    <header id="profile-header" class="border-b-2 border-strong pb-6">
+      <div class="flex flex-wrap items-center gap-3">
+        <.notch_badge
+          :if={role_label(@account.platform_role)}
+          id="profile-role"
+          class="text-signal"
+        >
+          {role_label(@account.platform_role)}
+        </.notch_badge>
+        <.notch_badge id="profile-tier" class="text-ink-muted">
+          {tier_label(@account.trust_tier)}
+        </.notch_badge>
+        <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+          public profile
+        </span>
+      </div>
+
+      <h1
+        id="profile-handle"
+        class="mt-3 break-words font-display text-3xl font-medium uppercase leading-tight tracking-[0.02em] text-ink sm:text-4xl"
+      >
+        <span class="text-ink-faint">@</span>{@account.handle}
+      </h1>
+      <p :if={@account.display_name} class="mt-1 text-sm text-ink-muted">
+        {@account.display_name}
+      </p>
+
+      <div class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs text-ink-faint">
+        <span
+          class="inline-flex items-center gap-1.5"
+          title={"#{@reputation.verification} from verified work · #{@reputation.votes} from votes"}
+        >
+          <.icon name="hero-bolt" class="size-3.5" />
+          <span id="profile-reputation" class="tabular-nums text-ink-muted">
+            {@reputation.total}
+          </span>
+          reputation
+          <span class="text-ink-faint">
+            ({@reputation.verification} verified · {@reputation.votes} votes<span :if={
+              @reputation.at_risk > 0
+            }> · {@reputation.at_risk} at stake</span><span
+              :if={@reputation.slashed > 0}
+              class="text-signal"
+            > · {@reputation.slashed} slashed</span>)
+          </span>
+        </span>
+        <span class="inline-flex items-center gap-1.5">
+          <.icon name="hero-clock" class="size-3.5" /> joined {joined_on(@account.inserted_at)}
+        </span>
+        <a
+          :for={identity <- @account.identities}
+          :if={identity.profile_url}
+          id={"profile-identity-#{identity.provider}"}
+          href={identity.profile_url}
+          rel="noreferrer"
+          target="_blank"
+          class="inline-flex items-center gap-1.5 transition hover:text-signal"
+        >
+          <.icon name="hero-arrow-up-right" class="size-3.5" />
+          {provider_label(identity.provider)}<span :if={identity.provider_login}>/{identity.provider_login}</span>
+        </a>
+      </div>
+    </header>
+
+    <section
+      id="profile-stats"
+      class="mt-8 grid grid-cols-2 border-2 border-strong lg:grid-cols-4"
+    >
+      <div class="border-b border-r border-rule px-6 py-7 lg:border-b-0">
+        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Reviews</p>
+        <p
+          id="profile-review-count"
+          class="mt-3 font-display text-4xl font-medium tabular-nums text-ink"
+        >
+          {@stats.reviews}
+        </p>
+      </div>
+      <div class="border-b border-rule px-6 py-7 lg:border-b-0 lg:border-r">
+        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Findings</p>
+        <p
+          id="profile-finding-count"
+          class="mt-3 font-display text-4xl font-medium tabular-nums text-signal"
+        >
+          {@stats.findings}
+        </p>
+      </div>
+      <div class="border-r border-rule px-6 py-7">
+        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">Verdicts</p>
+        <p
+          id="profile-verdict-count"
+          class="mt-3 font-display text-4xl font-medium tabular-nums text-ink"
+        >
+          {@stats.verdicts}
+        </p>
+      </div>
+      <div class="px-6 py-7">
+        <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          Repositories
+        </p>
+        <p
+          id="profile-repo-count"
+          class="mt-3 font-display text-4xl font-medium tabular-nums text-ink"
+        >
+          {@stats.repositories}
+        </p>
+      </div>
+    </section>
+
+    <section id="profile-activity" class="mt-8">
+      <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+        Recent public contributions
+      </h2>
+
+      <p
+        :if={@activity == []}
+        id="profile-no-activity"
+        class="mt-4 font-mono text-xs text-ink-faint"
+      >
+        No public contributions yet.
+      </p>
+
+      <ul :if={@activity != []} class="mt-4 divide-y divide-rule border-t border-rule">
+        <li :for={entry <- @activity}>
+          <.link
+            navigate={TarakanWeb.RepositoryPaths.repository_security_path(entry.repository)}
+            class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
+          >
+            <span class="shrink-0 tabular-nums text-ink-faint">{activity_time(entry.at)}</span>
+            <span
+              :if={entry.kind == :review}
+              class="min-w-0 truncate text-ink-muted transition group-hover:text-ink"
+            >
+              <span class="text-ink-faint">reviewed</span>
+              {entry.repository.owner}/{entry.repository.name}
+            </span>
+            <span
+              :if={entry.kind == :verdict}
+              class="min-w-0 truncate text-ink-muted transition group-hover:text-ink"
+            >
+              <span class={[
+                entry.verdict == "confirmed" && "text-quote",
+                entry.verdict == "disputed" && "text-signal"
+              ]}>{entry.verdict}</span>
+              a review of {entry.repository.owner}/{entry.repository.name}
+            </span>
+            <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+              <span :if={entry.kind == :review and entry.verified} class="text-ink-muted">verified · </span>
+              <span :if={entry.kind == :review and entry.findings_count > 0} class="text-signal">
+                {entry.findings_count} findings
+              </span>
+              <span :if={entry.kind == :review and entry.findings_count == 0}>no findings</span>
+              <span :if={entry.kind == :verdict}>{provenance_label(entry.provenance)}</span>
+            </span>
+          </.link>
+        </li>
+      </ul>
+    </section>
+  </Layouts.page>
+</Layouts.app>

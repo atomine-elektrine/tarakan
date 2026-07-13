@@ -1,0 +1,380 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.breadcrumbs id="finding-breadcrumb">
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb navigate={TarakanWeb.RepositoryPaths.repository_security_path(@repository)}>
+        {@repository.owner}/{@repository.name}
+      </:crumb>
+      <:crumb>finding</:crumb>
+    </.breadcrumbs>
+
+    <div class="flex flex-wrap items-center gap-3">
+      <.notch_badge id="finding-severity" class="bg-signal text-ground">
+        {@finding.severity}
+      </.notch_badge>
+      <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+        {review_kind_label(@scan.review_kind)}
+      </span>
+      <span
+        class="font-mono text-[10px] text-ink-faint"
+        title={@scan.review_status}
+      >
+        · {TarakanWeb.FindingPresentation.status_blurb(@scan.review_status)}
+      </span>
+      <span
+        :if={@finding.canonical_finding}
+        id="finding-canonical-memory"
+        class="font-mono text-[10px] text-ink-faint"
+      >
+        · canonical {@finding.canonical_finding.status} · detected in {@finding.canonical_finding.detections_count}
+        {if @finding.canonical_finding.detections_count == 1, do: "run", else: "runs"}
+      </span>
+      <.notch_badge
+        :if={@finding.canonical_finding.status == "verified"}
+        id="finding-verified-badge"
+        class="bg-ink text-ground"
+      >
+        Verified
+      </.notch_badge>
+    </div>
+
+    <div class="mt-3 flex items-start gap-3">
+      <.vote_control
+        subject_type="canonical_finding"
+        subject_id={@finding.canonical_finding.id}
+        summary={@finding_votes}
+        can_vote={@can_vote}
+        class="mt-1.5 shrink-0"
+      />
+      <h1
+        id="finding-title"
+        class="break-words font-display text-2xl font-medium leading-tight text-ink sm:text-3xl"
+      >
+        {@finding.title}
+      </h1>
+    </div>
+
+    <.link
+      id="finding-source-link"
+      navigate={~p"/findings/#{@finding.public_id}/code"}
+      class="mt-3 inline-flex items-center gap-1.5 font-mono text-xs text-ink-muted transition hover:text-signal"
+      aria-label={"Open #{@finding.file_path} at the finding's pinned commit"}
+    >
+      {@finding.file_path}{finding_lines(@finding)}
+      <.icon name="hero-arrow-right" class="size-3.5" />
+    </.link>
+
+    <% structured = TarakanWeb.FindingPresentation.structure_description(@finding.description) %>
+    <div id="finding-description" class="mt-5 max-w-3xl space-y-4">
+      <p
+        :if={structured.lead != ""}
+        class="whitespace-pre-line border-l-2 border-rule pl-4 text-sm leading-6 text-ink"
+        phx-no-format
+      >{structured.lead}</p>
+      <div
+        :for={{label, body} <- structured.sections}
+        class="border border-rule bg-panel px-4 py-3"
+      >
+        <h3 class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          {label}
+        </h3>
+        <p class="mt-1.5 whitespace-pre-line text-sm leading-6 text-ink-muted" phx-no-format>{body}</p>
+      </div>
+      <p
+        :if={structured.lead == "" and structured.sections == []}
+        class="whitespace-pre-line border-l-2 border-rule pl-4 text-sm leading-6 text-ink-muted"
+        phx-no-format
+      >{@finding.description}</p>
+    </div>
+
+    <section id="finding-review-record" class="mt-8 border-2 border-strong">
+      <div class="border-b border-rule bg-panel px-5 py-3">
+        <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          About this report
+        </h2>
+      </div>
+      <dl class="grid grid-cols-1 gap-x-8 gap-y-4 px-5 py-4 text-xs sm:grid-cols-2">
+        <div>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Pinned commit
+          </dt>
+          <dd class="mt-1 font-mono tabular-nums text-ink" title={@scan.commit_sha}>
+            {String.slice(@scan.commit_sha || "", 0, 12)}
+          </dd>
+        </div>
+        <div :if={@scan.commit_committed_at}>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Commit date
+          </dt>
+          <dd class="mt-1 font-mono tabular-nums text-ink">
+            {record_time(@scan.commit_committed_at)}
+          </dd>
+        </div>
+        <div>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            How it was made
+          </dt>
+          <dd id="finding-provenance" class="mt-1 text-ink">
+            {TarakanWeb.FindingPresentation.how_made_label(@scan.provenance)}
+            <span class="text-ink-faint"> (submitter claim)</span>
+            <span :if={@scan.model} class="mt-0.5 block font-mono text-[11px] text-ink-muted">
+              Model {@scan.model}
+              <span :if={@scan.prompt_version}> · {@scan.prompt_version}</span>
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Submitted
+          </dt>
+          <dd class="mt-1 text-ink">
+            <.handle_link handle={@scan.submitted_by.handle} />
+            <span class="font-mono tabular-nums text-ink-muted">
+              · {record_time(@scan.inserted_at)}
+            </span>
+          </dd>
+        </div>
+        <div :if={@scan.reviewed_at}>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Disclosed
+          </dt>
+          <dd class="mt-1 font-mono tabular-nums text-ink">{record_time(@scan.reviewed_at)}</dd>
+        </div>
+        <div :if={@review_stake}>
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Reputation staked
+          </dt>
+          <dd
+            id="finding-stake"
+            class={[
+              "mt-1 font-mono tabular-nums",
+              @review_stake.status == :slashed && "text-signal",
+              @review_stake.status == :returned && "text-quote",
+              @review_stake.status == :at_risk && "text-ink"
+            ]}
+          >
+            {@review_stake.amount} · {stake_label(@review_stake.status)}
+          </dd>
+        </div>
+        <div :if={@scan.notes} class="sm:col-span-2">
+          <dt class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            Report summary
+          </dt>
+          <dd class="mt-1 text-sm leading-6 text-ink-muted">
+            <% notes = TarakanWeb.FindingPresentation.humanize_notes(@scan.notes) %>
+            <div :if={notes && notes.kind == :summary}>
+              <p class="text-ink">
+                {notes.count} {if notes.count == 1, do: "finding", else: "findings"} in this report.
+              </p>
+              <ol :if={notes.tops != []} class="mt-2 list-decimal space-y-1 pl-5">
+                <li :for={top <- notes.tops} class="text-ink-muted">{top}</li>
+              </ol>
+            </div>
+            <p :if={notes && notes.kind == :plain} class="whitespace-pre-line">{notes.text}</p>
+          </dd>
+        </div>
+      </dl>
+    </section>
+
+    <details
+      :if={@scan.raw_document}
+      id="finding-raw-report"
+      class="mt-8 border-2 border-strong"
+    >
+      <summary class="cursor-pointer border-b border-rule bg-panel px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint transition hover:text-ink">
+        Technical: raw submitted JSON
+        <span class="ml-2 normal-case tracking-normal text-ink-faint/80">
+          (scan format v1 · full report, not just this finding)
+        </span>
+      </summary>
+      <pre class="max-h-[24rem] overflow-auto px-5 py-4 font-mono text-[11px] leading-5 text-ink-muted">{raw_report(@scan)}</pre>
+    </details>
+
+    <section id="finding-verification" class="mt-8 border-2 border-strong">
+      <div class="border-b border-rule bg-panel px-5 py-3">
+        <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          Independent verification
+        </h2>
+      </div>
+
+      <div class="px-5 py-4">
+        <div id="finding-verdict-counts" class="font-mono text-xs text-ink-muted">
+          {@finding.canonical_finding.confirmations_count} confirmed · {@finding.canonical_finding.disputes_count} disputed
+          <span class="text-ink-faint">· status {@finding.canonical_finding.status}</span>
+        </div>
+
+        <p :if={@finding_checks == []} id="finding-no-checks" class="mt-4 text-xs text-ink-faint">
+          No checks have been submitted at this commit.
+        </p>
+
+        <div
+          :if={@finding_checks != []}
+          id="finding-checks"
+          class="mt-4 divide-y divide-rule border-y border-rule"
+        >
+          <article :for={check <- @finding_checks} id={"finding-check-#{check.id}"} class="py-4">
+            <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <.handle_link handle={check.account.handle} class="font-mono text-xs font-semibold" />
+              <span class={[
+                "font-mono text-[10px] uppercase tracking-[0.12em]",
+                check.verdict == "confirmed" && "text-quote",
+                check.verdict == "disputed" && "text-signal",
+                check.verdict == "fixed" && "text-quote"
+              ]}>
+                {check.verdict}
+              </span>
+              <span class="font-mono text-[10px] text-ink-faint">
+                · {provenance_label(check.provenance)} · {record_time(check.inserted_at)}
+              </span>
+              <span class={[
+                "ml-auto font-mono text-[9px] uppercase tracking-[0.12em]",
+                check.counts_toward_quorum && "text-ink-muted",
+                !check.counts_toward_quorum && "text-ink-faint"
+              ]}>
+                {if check.counts_toward_quorum,
+                  do: "counts toward quorum",
+                  else: "corroboration only"}
+              </span>
+            </div>
+            <p class="mt-2 whitespace-pre-line text-xs leading-5 text-ink-muted" phx-no-format>{check.notes}</p>
+            <details :if={check.evidence} class="mt-2">
+              <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint hover:text-ink">
+                Evidence
+              </summary>
+              <pre class="mt-2 overflow-x-auto border border-rule bg-panel px-3 py-2 font-mono text-[11px] leading-5 text-ink-muted">{check.evidence}</pre>
+            </details>
+          </article>
+        </div>
+
+        <details
+          :if={@can_check}
+          id="finding-verdict"
+          class="mt-4 border-t border-rule pt-4"
+        >
+          <summary class="cursor-pointer font-mono text-[11px] text-ink-faint transition hover:text-ink">
+            Record a check
+          </summary>
+          <form
+            id="finding-verdict-form"
+            phx-submit="record_finding_verdict"
+            class="mt-2 flex flex-wrap gap-2"
+          >
+            <input
+              id="finding-verdict-notes"
+              type="text"
+              name="notes"
+              required
+              minlength="20"
+              maxlength="2000"
+              placeholder="Evidence notes (required)"
+              autocomplete="off"
+              class="min-w-0 flex-1 basis-48 border border-rule bg-transparent px-3 py-1.5 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-phosphor"
+            />
+            <button
+              name="verdict"
+              value="confirmed"
+              class="border border-rule px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-quote hover:text-quote"
+            >
+              Confirm
+            </button>
+            <button
+              name="verdict"
+              value="disputed"
+              class="border border-rule px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-signal hover:text-signal"
+            >
+              Dispute
+            </button>
+            <button
+              name="verdict"
+              value="fixed"
+              class="border border-rule px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-quote hover:text-quote"
+            >
+              Fixed
+            </button>
+          </form>
+        </details>
+
+        <.link
+          :if={is_nil(@current_scope) or is_nil(@current_scope.account)}
+          id="finding-verify-login"
+          navigate={~p"/accounts/log-in"}
+          class="mt-4 block border-t border-rule pt-4 font-mono text-xs text-signal hover:underline"
+        >
+          Sign in to confirm or dispute this finding.
+        </.link>
+      </div>
+    </section>
+
+    <section id="finding-discussion" class="mt-8 border-2 border-strong">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 border-b border-rule bg-panel px-5 py-3">
+        <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          Discussion
+        </h2>
+        <span id="finding-comment-count" class="font-mono text-[10px] tabular-nums text-ink-faint">
+          {@comment_count} {if @comment_count == 1, do: "comment", else: "comments"}
+        </span>
+      </div>
+
+      <div class="px-5 py-4">
+        <form
+          :if={@current_scope && @current_scope.account}
+          id="finding-comment-form"
+          phx-submit="post_comment"
+          class="flex flex-col gap-2"
+        >
+          <textarea
+            id="finding-comment-body"
+            name="body"
+            rows="3"
+            placeholder="Add evidence, a counter-argument, or context…"
+            class="w-full border-2 border-strong bg-transparent px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-2 focus:ring-phosphor"
+          ></textarea>
+          <div>
+            <button class="clip-notch bg-btn px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90">
+              Post comment
+            </button>
+          </div>
+        </form>
+
+        <.link
+          :if={is_nil(@current_scope) or is_nil(@current_scope.account)}
+          id="finding-comment-login"
+          navigate={~p"/accounts/log-in"}
+          class="block font-mono text-xs text-signal hover:underline"
+        >
+          Sign in to join the discussion.
+        </.link>
+
+        <p
+          :if={@comments == []}
+          id="finding-no-comments"
+          class="mt-4 font-mono text-xs text-ink-faint"
+        >
+          No comments yet.
+        </p>
+
+        <div :if={@comments != []} class="mt-5 space-y-4">
+          <.comment_thread
+            :for={comment <- @comments}
+            comment={comment}
+            reply_to={@reply_to}
+            can_reply={!is_nil(@current_scope) and !is_nil(@current_scope.account)}
+            can_moderate={@can_moderate_comments}
+            can_vote={@can_vote}
+            votes={@comment_votes}
+          />
+        </div>
+      </div>
+    </section>
+
+    <p class="mt-6 font-mono text-xs">
+      <.link
+        id="finding-record-link"
+        navigate={TarakanWeb.RepositoryPaths.repository_security_path(@repository)}
+        class="text-signal transition hover:underline"
+      >
+        Full security record for {@repository.owner}/{@repository.name}
+      </.link>
+    </p>
+  </Layouts.page>
+</Layouts.app>

@@ -1,0 +1,86 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>add repository</:crumb>
+    </.breadcrumbs>
+
+    <main id="add-repository" class="border-2 border-strong">
+      <header class="border-b-2 border-strong bg-panel px-5 py-6 sm:px-8 sm:py-8">
+        <h1 class="font-display text-3xl uppercase tracking-[0.06em] text-ink sm:text-4xl">
+          Add repository
+        </h1>
+      </header>
+
+      <section id="register-remote" class="px-5 py-6 sm:px-8 sm:py-8">
+        <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          Register a public repository
+        </h2>
+        <.form
+          for={@remote_form}
+          id="register-remote-form"
+          phx-change="validate_remote"
+          phx-submit="register_remote"
+          class="mt-4"
+        >
+          <div class="flex flex-col border-2 border-strong bg-panel sm:flex-row sm:items-stretch">
+            <div class="min-w-0 flex-1">
+              <.input
+                field={@remote_form[:url]}
+                type="text"
+                autocomplete="off"
+                placeholder="github.com/owner/repository"
+                hide_errors
+                class="h-12 w-full border-0 bg-transparent px-4 py-3 font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-0"
+              />
+            </div>
+            <button
+              id="register-remote-button"
+              type="submit"
+              class="flex shrink-0 items-center justify-center gap-2 border-t-2 border-strong bg-btn px-6 py-3 font-display text-sm uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor phx-submit-loading:cursor-wait phx-submit-loading:opacity-60 sm:border-l-2 sm:border-t-0"
+            >
+              Register
+            </button>
+          </div>
+          <div class="mt-2">
+            <.field_errors field={@remote_form[:url]} />
+          </div>
+        </.form>
+      </section>
+
+      <section id="create-hosted" class="border-t border-rule px-5 py-6 sm:px-8 sm:py-8">
+        <h2 class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+          Or create a repository hosted on Tarakan
+        </h2>
+        <.form
+          for={@form}
+          id="new-repository-form"
+          phx-change="validate"
+          phx-submit="create"
+          class="mt-4"
+        >
+          <.input
+            field={@form[:name]}
+            type="text"
+            label="Repository name"
+            placeholder="my-project"
+            autocomplete="off"
+          />
+          <p class="mt-2 font-mono text-xs text-ink-faint">
+            {@current_scope.account.handle}/{@form[:name].value || "…"}
+          </p>
+
+          <div class="mt-6 flex justify-end border-t border-rule pt-5">
+            <button
+              id="create-repository"
+              type="submit"
+              class="border-2 border-strong px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-ink transition hover:bg-panel phx-submit-loading:opacity-60"
+            >
+              Create repository
+            </button>
+          </div>
+        </.form>
+      </section>
+    </main>
+  </Layouts.page>
+</Layouts.app>

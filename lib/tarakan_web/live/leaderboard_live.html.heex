@@ -1,0 +1,92 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-6 sm:py-8"]}>
+    <.breadcrumbs id="leaderboard-breadcrumb">
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb>leaderboard</:crumb>
+    </.breadcrumbs>
+
+    <div class="flex flex-col gap-3 border-b-2 border-strong pb-5 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <h1 class="font-display text-3xl font-medium uppercase tracking-[0.04em] text-ink sm:text-4xl">
+          Leaderboard
+        </h1>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
+          Ranked by reputation earned from verified security work.
+        </p>
+      </div>
+
+      <div
+        id="leaderboard-sort"
+        class="flex flex-wrap border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em]"
+        role="group"
+        aria-label="Rank by"
+      >
+        <button
+          :for={
+            {value, label} <- [
+              {"reputation", "Reputation"},
+              {"reviews", "Reviews"},
+              {"findings", "Findings"},
+              {"verdicts", "Verdicts"}
+            ]
+          }
+          type="button"
+          phx-click="sort"
+          phx-value-by={value}
+          aria-pressed={to_string(@sort == value)}
+          class={[
+            "px-3 py-1.5 transition",
+            @sort == value && "bg-btn text-btn-fg",
+            @sort != value && "text-ink-faint hover:text-ink"
+          ]}
+        >
+          {label}
+        </button>
+      </div>
+    </div>
+
+    <p :if={@entries == []} id="leaderboard-empty" class="mt-8 font-mono text-sm text-ink-faint">
+      No ranked contributors yet.
+    </p>
+
+    <ol
+      :if={@entries != []}
+      id="leaderboard"
+      class="mt-6 divide-y divide-rule border-t border-rule"
+    >
+      <li
+        :for={{entry, index} <- Enum.with_index(@entries, 1)}
+        id={"leaderboard-rank-#{index}"}
+        class="flex items-center gap-4 py-3"
+      >
+        <span class={[
+          "w-8 shrink-0 text-right font-display text-xl font-medium tabular-nums",
+          rank_style(index)
+        ]}>
+          {index}
+        </span>
+
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <.handle_link handle={entry.account.handle} class="font-mono text-sm text-ink" />
+            <span class="border border-rule px-1.5 font-display text-[9px] uppercase tracking-[0.14em] text-ink-faint">
+              {tier_label(entry.account.trust_tier)}
+            </span>
+          </div>
+          <p class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            {entry.stats.reviews} reviews · {entry.stats.findings} findings · {entry.stats.verdicts} verdicts
+          </p>
+        </div>
+
+        <div class="shrink-0 text-right">
+          <p class="font-display text-2xl font-medium tabular-nums text-ink">
+            {entry.reputation.total}
+          </p>
+          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+            reputation
+          </p>
+        </div>
+      </li>
+    </ol>
+  </Layouts.page>
+</Layouts.app>

@@ -1,0 +1,243 @@
+<Layouts.app flash={@flash} current_scope={@current_scope}>
+  <Layouts.page class={["py-4 sm:py-5"]}>
+    <.breadcrumbs>
+      <:crumb navigate={~p"/"}>registry</:crumb>
+      <:crumb navigate={if @moderator?, do: ~p"/moderation/queue"}>moderation</:crumb>
+      <:crumb>case/{@case_record.id}</:crumb>
+    </.breadcrumbs>
+
+    <main id="moderation-case" class="border-2 border-strong">
+      <header class="border-b-2 border-strong bg-panel px-5 py-6 sm:px-8 sm:py-8">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <h1 class="font-display text-3xl uppercase tracking-[0.06em] text-ink sm:text-4xl">
+            Case #{@case_record.id}
+          </h1>
+          <span
+            id="moderation-case-status"
+            class="border border-rule px-3 py-1 font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted"
+          >
+            {status_label(@case_record.status)}
+          </span>
+        </div>
+        <p class="mt-3 text-sm text-ink-muted">
+          {subject_label(@case_record.subject_type)} #{@case_record.subject_id}
+        </p>
+      </header>
+
+      <section id="moderation-case-report" class="px-5 py-6 sm:px-8 sm:py-8">
+        <dl class="grid gap-6 sm:grid-cols-[10rem_minmax(0,1fr)]">
+          <div>
+            <dt class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+              Reason
+            </dt>
+            <dd class="mt-2 text-sm text-ink">{reason_label(@case_record.reason)}</dd>
+          </div>
+          <div>
+            <dt class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+              Report
+            </dt>
+            <dd class="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">
+              {@case_record.description}
+            </dd>
+          </div>
+        </dl>
+
+        <div
+          :if={@case_record.resolution}
+          id="moderation-case-resolution"
+          class="mt-7 border-t border-rule pt-6"
+        >
+          <h2 class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+            Decision
+          </h2>
+          <p class="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">
+            {@case_record.resolution}
+          </p>
+        </div>
+      </section>
+
+      <section
+        :if={can_assign?(@case_record, @current_scope)}
+        id="moderation-case-assignment"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">
+          Independent review
+        </h2>
+        <button
+          id="assign-moderation-case"
+          phx-click="assign"
+          class="clip-notch mt-5 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-click-loading:opacity-60"
+        >
+          Assign to me
+        </button>
+      </section>
+
+      <section
+        :if={can_resolve?(@case_record, @current_scope)}
+        id="moderation-case-decision"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">Decide case</h2>
+        <.form
+          for={@resolution_form}
+          id="moderation-case-decision-form"
+          phx-submit="resolve"
+          class="mt-5"
+        >
+          <.input
+            field={@resolution_form[:reason]}
+            type="textarea"
+            label="Decision reason"
+            minlength="10"
+            maxlength="2000"
+            rows="5"
+          />
+          <div class="mt-4 flex flex-wrap gap-3">
+            <button
+              id="resolve-moderation-case"
+              type="submit"
+              name="disposition"
+              value="resolved"
+              class="clip-notch bg-btn px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90"
+            >
+              Resolve report
+            </button>
+            <button
+              id="dismiss-moderation-case"
+              type="submit"
+              name="disposition"
+              value="dismissed"
+              class="border border-rule px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-ink transition hover:border-strong"
+            >
+              Dismiss report
+            </button>
+          </div>
+        </.form>
+      </section>
+
+      <section
+        :if={can_appeal?(@case_record, @current_scope)}
+        id="moderation-case-appeal"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">Appeal decision</h2>
+        <.form for={@appeal_form} id="moderation-appeal-form" phx-submit="appeal" class="mt-5">
+          <.input
+            field={@appeal_form[:reason]}
+            type="textarea"
+            label="Grounds for appeal"
+            minlength="20"
+            maxlength="5000"
+            rows="6"
+          />
+          <button
+            id="submit-moderation-appeal"
+            type="submit"
+            class="clip-notch mt-4 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-submit-loading:opacity-60"
+          >
+            Submit appeal
+          </button>
+        </.form>
+      </section>
+
+      <section
+        :if={@case_record.appeals != []}
+        id="moderation-case-appeals"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">Appeals</h2>
+        <div class="mt-5 grid gap-5">
+          <article
+            :for={appeal <- @case_record.appeals}
+            id={"moderation-appeal-#{appeal.id}"}
+            class="border border-rule p-5"
+          >
+            <% appeal_form = Map.fetch!(@appeal_decision_forms, appeal.id) %>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <span class="font-mono text-xs text-ink-faint">Appeal #{appeal.id}</span>
+              <span class="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">
+                {status_label(appeal.status)}
+              </span>
+            </div>
+            <p class="mt-4 whitespace-pre-line text-sm leading-6 text-ink-muted">
+              {appeal.reason}
+            </p>
+            <div :if={appeal.decision_reason} class="mt-5 border-t border-rule pt-4">
+              <h3 class="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+                Appeal decision
+              </h3>
+              <p class="mt-2 whitespace-pre-line text-sm leading-6 text-ink-muted">
+                {appeal.decision_reason}
+              </p>
+            </div>
+
+            <.form
+              :if={can_decide_appeal?(@case_record, appeal, @current_scope)}
+              for={appeal_form}
+              id={"moderation-appeal-decision-form-#{appeal.id}"}
+              phx-submit="decide_appeal"
+              class="mt-5 border-t border-rule pt-5"
+            >
+              <input
+                type="hidden"
+                name={appeal_form[:appeal_id].name}
+                value={appeal.id}
+              />
+              <.input
+                field={appeal_form[:reason]}
+                id={"moderation-appeal-decision-reason-#{appeal.id}"}
+                type="textarea"
+                label="Independent decision reason"
+                minlength="10"
+                maxlength="2000"
+                rows="4"
+              />
+              <div class="mt-4 flex flex-wrap gap-3">
+                <button
+                  id={"uphold-moderation-appeal-#{appeal.id}"}
+                  type="submit"
+                  name="decision"
+                  value="upheld"
+                  class="clip-notch bg-btn px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90"
+                >
+                  Uphold appeal
+                </button>
+                <button
+                  id={"deny-moderation-appeal-#{appeal.id}"}
+                  type="submit"
+                  name="decision"
+                  value="denied"
+                  class="border border-rule px-4 py-2 font-display text-xs uppercase tracking-[0.14em] text-ink transition hover:border-strong"
+                >
+                  Deny appeal
+                </button>
+              </div>
+            </.form>
+          </article>
+        </div>
+      </section>
+
+      <section
+        :if={
+          @moderator? && Ecto.assoc_loaded?(@case_record.actions) && @case_record.actions != []
+        }
+        id="moderation-case-actions"
+        class="border-t border-rule px-5 py-6 sm:px-8"
+      >
+        <h2 class="font-display text-xl uppercase tracking-[0.08em] text-ink">Case history</h2>
+        <ol class="mt-5 grid gap-4">
+          <li :for={action <- @case_record.actions} id={"moderation-action-#{action.id}"}>
+            <p class="font-mono text-[11px] uppercase tracking-[0.14em] text-ink-muted">
+              {reason_label(action.action)} · {Calendar.strftime(
+                action.inserted_at,
+                "%Y-%m-%d %H:%M UTC"
+              )}
+            </p>
+            <p class="mt-1 text-sm leading-6 text-ink-muted">{action.reason}</p>
+          </li>
+        </ol>
+      </section>
+    </main>
+  </Layouts.page>
+</Layouts.app>
