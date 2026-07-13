@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - master
+      - main
   workflow_dispatch:
 
 permissions:
@@ -58,9 +58,8 @@ jobs:
     name: Deploy production
     needs: test
     if: >-
-      github.ref == 'refs/heads/master' &&
-      github.event_name != 'pull_request' &&
-      vars.DEPLOY_ENABLED == 'true'
+      github.ref == 'refs/heads/main' &&
+      github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     env:
       DEPLOY_HOST: 66.42.113.222

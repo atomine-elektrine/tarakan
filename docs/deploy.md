@@ -90,15 +90,14 @@ cannot fill a small VPS disk.
 ### GitHub Actions deployment
 
 `.github/workflows/ci-deploy.yml` runs `mix precommit` against PostgreSQL 16
-for pull requests and pushes. A successful push to `master` then builds the
+for pull requests and pushes. A successful push to `main` then builds the
 production image on the GitHub runner, uploads it over SSH, takes a backup,
 runs migrations, starts the release, and requires an HTTP health check.
 
-Deployment is disabled until both repository settings exist:
+Deployment requires this repository setting:
 
 - Actions secret `DEPLOY_SSH_KEY`: the private half of the dedicated VPS
   deployment key.
-- Actions variable `DEPLOY_ENABLED`: set to `true` after the secret is saved.
 
 The VPS host key is pinned in the workflow. Rotating the server SSH host key
 requires updating that pinned public key before the next deployment.
