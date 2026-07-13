@@ -6,18 +6,25 @@ BACKUP_DIR=${BACKUP_DIR:-$APP_DIR/backups}
 RETENTION_DAYS=${RETENTION_DAYS:-7}
 
 cd "$APP_DIR"
-umask 077
+# Backups are shared only between the service account and the deployment
+# account through the private linuxuser group.
+umask 007
 
 set -a
 # shellcheck disable=SC1091
 . "$APP_DIR/.env"
 set +a
 
-timestamp=$(date -u +%Y%m%dT%H%M%SZ)
+mkdir -p "$BACKUP_DIR"
+
+# The systemd timer and a deployment can request a backup at the same time.
+exec 8> "$BACKUP_DIR/.backup.lock"
+flock 8
+
+timestamp=$(date -u +%Y%m%dT%H%M%S%NZ)
 partial="$BACKUP_DIR/.backup-$timestamp.partial"
 complete="$BACKUP_DIR/backup-$timestamp"
 
-mkdir -p "$BACKUP_DIR"
 rm -rf "$partial"
 mkdir "$partial"
 
