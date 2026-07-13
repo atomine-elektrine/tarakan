@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload release
         run: |
-          rsync -az --delete-delay \
+          rsync -az --delete-delay --chmod=Dg+rwx,Fg+rw \
             --exclude='.git/' \
             --exclude='.env' \
             --exclude='.deploy/' \
