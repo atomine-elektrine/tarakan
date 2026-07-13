@@ -61,6 +61,10 @@ your-domain.com {
 }
 ```
 
+The production host in this repository uses `ops/Caddyfile`. Before enabling
+Caddy, confirm that the hostname has a public `A` record pointing at the VPS;
+otherwise automatic certificate issuance cannot succeed.
+
 Rate limiting is **node-local**. Run a single app replica or replace
 `Tarakan.RateLimiter` with a shared backend before multi-node production.
 
@@ -79,6 +83,54 @@ docker compose exec app /app/bin/tarakan remote
 # Update to a new version
 git pull && docker compose up -d --build
 ```
+
+Container logs are capped at three 10 MB files per service so a noisy process
+cannot fill a small VPS disk.
+
+### GitHub Actions deployment
+
+`.github/workflows/ci-deploy.yml` runs `mix precommit` against PostgreSQL 16
+for pull requests and pushes. A successful push to `master` then builds the
+production image on the GitHub runner, uploads it over SSH, takes a backup,
+runs migrations, starts the release, and requires an HTTP health check.
+
+Deployment is disabled until both repository settings exist:
+
+- Actions secret `DEPLOY_SSH_KEY`: the private half of the dedicated VPS
+  deployment key.
+- Actions variable `DEPLOY_ENABLED`: set to `true` after the secret is saved.
+
+The VPS host key is pinned in the workflow. Rotating the server SSH host key
+requires updating that pinned public key before the next deployment.
+
+The active immutable image tag is stored in `.deploy/image.env` on the VPS.
+That directory, `.env`, backups, and persistent repository data are excluded
+from source synchronization.
+
+### Automated backups
+
+The `ops/backup.sh` script creates a compressed PostgreSQL dump and an archive
+of the hosted-repository volume, validates both, records SHA-256 checksums, and
+removes backup sets older than seven days. It intentionally excludes the
+regenerable mirror cache.
+
+Install the included systemd timer on a single-node Linux host:
+
+```sh
+sudo install -m 0644 ops/tarakan-backup.service /etc/systemd/system/
+sudo install -m 0644 ops/tarakan-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now tarakan-backup.timer
+
+# Run and verify the first backup immediately.
+sudo systemctl start tarakan-backup.service
+sudo journalctl -u tarakan-backup.service -n 20 --no-pager
+```
+
+Backup sets are written under `/opt/tarakan/backups` by default. Keeping them
+on the VPS protects against application mistakes, but not a failed or deleted
+server; copy them to a separate provider or storage account for disaster
+recovery.
 
 ## Git hosting over SSH (optional)
 
@@ -111,7 +163,7 @@ treat them differently:
 Both are on named Docker volumes in `docker-compose.yml`, so they survive
 container rebuilds. The distinction only matters for backups and moving hosts.
 
-### Backing up hosted repositories
+### Backing up hosted repositories manually
 
 Back up the `hosted` volume together with the database (a hosted repo is a git
 repo on disk plus its registry row in Postgres). The mirror volume needs no

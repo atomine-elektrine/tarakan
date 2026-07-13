@@ -10,6 +10,11 @@ services:
   db:
     image: postgres:16
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
@@ -23,8 +28,14 @@ services:
       retries: 10
 
   app:
+    image: ${APP_IMAGE:-tarakan-app}
     build: .
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # Erlang sizes its port table from RLIMIT_NOFILE. Some Docker hosts expose
     # a billion-file limit, which wastes more than 1 GB before serving traffic.
     ulimits:
