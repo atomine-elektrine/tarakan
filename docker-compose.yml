@@ -66,6 +66,9 @@ services:
       # Optional OAuth sign-in.
       GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
       GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      # Transactional email through Elektrine's scoped external API.
+      ELEKTRINE_EMAIL_API_URL: ${ELEKTRINE_EMAIL_API_URL:-https://elektrine.com}
+      ELEKTRINE_EMAIL_API_KEY: ${ELEKTRINE_EMAIL_API_KEY:?set ELEKTRINE_EMAIL_API_KEY in .env}
     # Migrate, then serve. Both boot the release; migrate exits first.
     command: ["/bin/sh", "-c", "/app/bin/migrate && /app/bin/server"]
     ports:

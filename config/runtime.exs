@@ -168,6 +168,15 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
+  elektrine_email_api_key =
+    System.get_env("ELEKTRINE_EMAIL_API_KEY") ||
+      raise "environment variable ELEKTRINE_EMAIL_API_KEY is missing"
+
+  config :tarakan, Tarakan.Mailer,
+    adapter: Tarakan.Mailer.ElektrineAdapter,
+    api_key: elektrine_email_api_key,
+    base_url: System.get_env("ELEKTRINE_EMAIL_API_URL", "https://elektrine.com")
+
   # ## SSL Support
   #
   # To get SSL working, you will need to add the `https` key
@@ -199,22 +208,4 @@ if config_env() == :prod do
   #       force_ssl: [hsts: true]
   #
   # Check `Plug.SSL` for all available options in `force_ssl`.
-
-  # ## Configuring the mailer
-  #
-  # In production you need to configure the mailer to use a different adapter.
-  # Here is an example configuration for Mailgun:
-  #
-  #     config :tarakan, Tarakan.Mailer,
-  #       adapter: Swoosh.Adapters.Mailgun,
-  #       api_key: System.get_env("MAILGUN_API_KEY"),
-  #       domain: System.get_env("MAILGUN_DOMAIN")
-  #
-  # Most non-SMTP adapters require an API client. Swoosh supports Req, Hackney,
-  # and Finch out-of-the-box. This configuration is typically done at
-  # compile-time in your config/prod.exs:
-  #
-  #     config :swoosh, :api_client, Swoosh.ApiClient.Req
-  #
-  # See https://swoosh.hexdocs.pm/Swoosh.html#module-installation for details.
 end
