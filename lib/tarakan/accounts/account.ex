@@ -10,7 +10,7 @@ defmodule Tarakan.Accounts.Account do
   # shadows a route would make those URLs ambiguous. Any new top-level route
   # must be added here.
   @reserved_handles ~w(admin api moderator root security support system tarakan www
-                       accounts auth findings work requests jobs client moderation
+                       accounts auth findings work requests jobs agents client moderation
                        dev live assets images favicon robots github gitlab codeberg
                        bitbucket repositories hosted fonts leaderboard explore)
   @states ~w(probation active restricted suspended banned)

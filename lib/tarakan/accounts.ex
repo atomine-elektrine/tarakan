@@ -617,8 +617,8 @@ defmodule Tarakan.Accounts do
   @doc """
   Checks whether the account is in sudo mode (recently authenticated).
 
-  Default window is 8 hours after the last password or magic-link sign-in.
-  Pass a more negative `minutes` to require a fresher login (e.g. `-20`).
+  Default window is **two hours** after the last password, magic-link, or OAuth
+  sign-in. Pass a more negative `minutes` to require a fresher login (e.g. `-20`).
   """
   def sudo_mode?(account, minutes \\ @sudo_window_minutes)
 
@@ -628,7 +628,7 @@ defmodule Tarakan.Accounts do
 
   def sudo_mode?(_account, _minutes), do: false
 
-  @doc "Default sudo window in minutes (negative), e.g. -480 for 8 hours."
+  @doc "Default sudo window in minutes (negative), e.g. -120 for two hours."
   def sudo_window_minutes, do: @sudo_window_minutes
 
   @doc """

@@ -115,7 +115,7 @@ defmodule Tarakan.Accounts.Scope do
 
   def token_scope?(%__MODULE__{token_scopes: scopes}, required) do
     required = List.wrap(required) |> Enum.map(&to_string/1)
-    MapSet.member?(scopes, "*") or Enum.any?(required, &MapSet.member?(scopes, &1))
+    Enum.any?(required, &MapSet.member?(scopes, &1))
   end
 
   def token_scope?(_scope, _required), do: false

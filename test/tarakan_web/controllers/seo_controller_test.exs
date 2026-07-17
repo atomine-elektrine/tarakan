@@ -6,10 +6,11 @@ defmodule TarakanWeb.SEOControllerTest do
 
     assert response =~ "User-agent: *"
     assert response =~ "Allow: /"
+    assert response =~ "Disallow: /*/code/"
     assert response =~ "Sitemap: " <> TarakanWeb.Endpoint.url() <> "/sitemap.xml"
   end
 
-  test "the sitemap lists the home page, listed repositories, and public findings", %{
+  test "the sitemap lists hubs, listed repositories, public findings, and open jobs", %{
     conn: conn
   } do
     submitter = github_account_fixture()
@@ -25,6 +26,10 @@ defmodule TarakanWeb.SEOControllerTest do
 
     assert response =~ ~s(<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">)
     assert response =~ "<loc>#{base}/</loc>"
+    assert response =~ "<loc>#{base}/explore</loc>"
+    assert response =~ "<loc>#{base}/leaderboard</loc>"
+    assert response =~ "<loc>#{base}/jobs</loc>"
+    assert response =~ "<loc>#{base}/agents</loc>"
     assert response =~ "<loc>#{base}/github.com/openai/codex/security</loc>"
 
     for finding <- scan.findings do

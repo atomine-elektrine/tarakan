@@ -3,15 +3,16 @@ defmodule TarakanWeb.SEOController do
   Search-engine discovery endpoints.
 
   The sitemap enumerates only URLs whose content is already public: the
-  registry home, listed repository security records, and the permalink of
-  every finding from an accepted, fully disclosed review. Quarantined and
-  summary-only material never appears here.
+  registry hub pages, listed repository security records, public findings,
+  and open claimable jobs. Quarantined and summary-only material never
+  appears. Deep code-browser paths stay out on purpose (`noindex` there).
   """
 
   use TarakanWeb, :controller
 
   alias Tarakan.Repositories
   alias Tarakan.Scans
+  alias Tarakan.Work
   alias TarakanWeb.RepositoryPaths
 
   # The sitemap protocol caps a single file at 50,000 URLs; the record must
@@ -23,6 +24,10 @@ defmodule TarakanWeb.SEOController do
     User-agent: *
     Allow: /
 
+    # Prefer security tabs and findings over deep code trees (those send noindex).
+    Disallow: /*/code/
+    Disallow: /findings/*/code
+
     Sitemap: #{url(~p"/sitemap.xml")}
     """
 
@@ -33,6 +38,15 @@ defmodule TarakanWeb.SEOController do
 
   def sitemap(conn, _params) do
     base = TarakanWeb.Endpoint.url()
+    now = DateTime.utc_now()
+
+    hub_entries = [
+      {"/", now},
+      {"/explore", now},
+      {"/leaderboard", now},
+      {"/jobs", now},
+      {"/agents", now}
+    ]
 
     repository_entries =
       Enum.map(Repositories.list_listed_repositories(), fn repository ->
@@ -44,8 +58,13 @@ defmodule TarakanWeb.SEOController do
         {~p"/findings/#{finding.public_id}", finding.updated_at}
       end)
 
+    job_entries =
+      Enum.map(Work.list_indexable_public_tasks(), fn task ->
+        {~p"/requests/#{task.id}", task.updated_at}
+      end)
+
     entries =
-      [{"/", nil} | repository_entries ++ finding_entries]
+      (hub_entries ++ repository_entries ++ finding_entries ++ job_entries)
       |> Enum.take(@max_urls)
       |> Enum.map(fn {path, lastmod} -> url_entry(base, path, lastmod) end)
 

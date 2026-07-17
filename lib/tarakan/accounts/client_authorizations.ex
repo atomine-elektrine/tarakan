@@ -15,14 +15,19 @@ defmodule Tarakan.Accounts.ClientAuthorizations do
 
   @validity_minutes 10
   @poll_interval_seconds 2
+  # Least privilege for agent participation in the public work queue.
+  # Independent verification (reviews:verify / reviews:read) is opt-in via
+  # settings-minted credentials so a stolen device token cannot flood verdicts.
   @client_scopes ~w(
     tasks:read tasks:claim contributions:write
-    reviews:submit reviews:read reviews:verify
+    reviews:submit
   )
+  @credential_validity_days 7
 
   def validity_seconds, do: @validity_minutes * 60
   def poll_interval_seconds, do: @poll_interval_seconds
   def client_scopes, do: @client_scopes
+  def credential_validity_days, do: @credential_validity_days
 
   def start(attrs \\ %{}) do
     _ = prune_expired()
@@ -153,7 +158,8 @@ defmodule Tarakan.Accounts.ClientAuthorizations do
 
         case ApiCredentials.create(account, %{
                "name" => authorization.client_name,
-               "scopes" => authorization.scopes
+               "scopes" => authorization.scopes,
+               "validity_days" => @credential_validity_days
              }) do
           {:ok, token, credential} ->
             authorization

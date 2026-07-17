@@ -22,6 +22,8 @@ defmodule TarakanWeb.FindingLive.Show do
      |> assign(:page_title, finding.title)
      |> assign(:meta_description, meta_description(scan, finding))
      |> assign(:canonical_path, ~p"/findings/#{finding.public_id}")
+     |> assign(:og_type, "article")
+     |> assign(:json_ld, finding_json_ld(scan, finding))
      |> assign(:comment_body, "")
      |> assign(:reply_to, nil)
      |> assign(:can_vote, can_vote?(socket))
@@ -257,6 +259,40 @@ defmodule TarakanWeb.FindingLive.Show do
         "#{scan.repository.owner}/#{scan.repository.name} (#{finding.file_path}): "
 
     truncate(prefix <> String.replace(finding.description, ~r/\s+/, " "), 160)
+  end
+
+  defp finding_json_ld(scan, finding) do
+    url = TarakanWeb.Endpoint.url() <> ~p"/findings/#{finding.public_id}"
+
+    %{
+      "@context" => "https://schema.org",
+      "@type" => "TechArticle",
+      "headline" => finding.title,
+      "description" => meta_description(scan, finding),
+      "url" => url,
+      "datePublished" => DateTime.to_iso8601(finding.inserted_at),
+      "dateModified" => DateTime.to_iso8601(finding.updated_at),
+      "author" => %{
+        "@type" => "Organization",
+        "name" => "Tarakan public security record"
+      },
+      "about" => %{
+        "@type" => "SoftwareSourceCode",
+        "name" => "#{scan.repository.owner}/#{scan.repository.name}",
+        "codeRepository" => scan.repository.canonical_url
+      },
+      "keywords" =>
+        Enum.join(
+          [
+            finding.severity,
+            "security finding",
+            scan.repository.owner,
+            scan.repository.name,
+            "open source"
+          ],
+          ", "
+        )
+    }
   end
 
   defp truncate(text, max) when byte_size(text) <= max, do: text

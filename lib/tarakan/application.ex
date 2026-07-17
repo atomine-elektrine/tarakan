@@ -12,6 +12,7 @@ defmodule Tarakan.Application do
       Tarakan.Repo,
       {Oban, Application.fetch_env!(:tarakan, Oban)},
       Tarakan.RateLimiter,
+      Tarakan.Git.Concurrency,
       Tarakan.RepositoryCode.Cache,
       {Task.Supervisor, name: Tarakan.TaskSupervisor},
       {DNSCluster, query: Application.get_env(:tarakan, :dns_cluster_query) || :ignore},

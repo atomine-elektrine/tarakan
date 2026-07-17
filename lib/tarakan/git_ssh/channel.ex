@@ -20,6 +20,7 @@ defmodule Tarakan.GitSSH.Channel do
 
   alias Tarakan.Accounts
   alias Tarakan.Accounts.SshKey
+  alias Tarakan.Git.Concurrency
   alias Tarakan.Git.Local
   alias Tarakan.HostedRepositories
   alias Tarakan.HostedRepositories.Storage
@@ -47,6 +48,7 @@ defmodule Tarakan.GitSSH.Channel do
        repository: nil,
        service: nil,
        port: nil,
+       concurrency_held?: false,
        exit_sent: false
      }}
   end
@@ -83,17 +85,33 @@ defmodule Tarakan.GitSSH.Channel do
   def handle_ssh_msg({:ssh_cm, cm, {:exec, channel_id, want_reply, command}}, %{cm: cm} = state) do
     case authorize_exec(state, to_string(command)) do
       {:ok, service, repository, scope} ->
-        :ssh_connection.reply_request(cm, want_reply, :success, channel_id)
+        case Concurrency.checkout() do
+          :ok ->
+            :ssh_connection.reply_request(cm, want_reply, :success, channel_id)
 
-        :telemetry.execute([:tarakan, :git, :ssh, :request], %{count: 1}, %{
-          service: service,
-          repository_id: repository.id
-        })
+            :telemetry.execute([:tarakan, :git, :ssh, :request], %{count: 1}, %{
+              service: service,
+              repository_id: repository.id
+            })
 
-        port = open_git_port(service, repository)
-        Process.send_after(self(), :git_deadline, timeout_ms(service))
+            port = open_git_port(service, repository)
+            Process.send_after(self(), :git_deadline, timeout_ms(service))
 
-        {:ok, %{state | service: service, repository: repository, scope: scope, port: port}}
+            {:ok,
+             %{
+               state
+               | service: service,
+                 repository: repository,
+                 scope: scope,
+                 port: port,
+                 concurrency_held?: true
+             }}
+
+          {:error, :busy} ->
+            :ssh_connection.reply_request(cm, want_reply, :success, channel_id)
+            _ = :ssh_connection.send(cm, channel_id, 1, "git service busy; try again shortly\n")
+            finish(state, 1)
+        end
 
       {:error, message} ->
         :ssh_connection.reply_request(cm, want_reply, :success, channel_id)
@@ -151,6 +169,7 @@ defmodule Tarakan.GitSSH.Channel do
       Port.close(state.port)
     end
 
+    release_concurrency(state)
     :ok
   end
 
@@ -266,12 +285,20 @@ defmodule Tarakan.GitSSH.Channel do
   ## Channel shutdown
 
   defp finish(state, exit_status) do
+    state = release_concurrency(state)
     _ = :ssh_connection.send_eof(state.cm, state.channel_id)
     _ = :ssh_connection.exit_status(state.cm, state.channel_id, exit_status)
     {:stop, state.channel_id, %{state | exit_sent: true, port: nil}}
   end
 
   defp stop(state) do
-    {:stop, state.channel_id, state}
+    {:stop, state.channel_id, release_concurrency(state)}
   end
+
+  defp release_concurrency(%{concurrency_held?: true} = state) do
+    Concurrency.checkin()
+    %{state | concurrency_held?: false}
+  end
+
+  defp release_concurrency(state), do: state
 end

@@ -157,11 +157,11 @@ defmodule TarakanWeb.ClientAuthorizationLive do
                     </li>
                     <li class={["flex gap-2"]}>
                       <.icon name="hero-check" class={["mt-0.5 size-4 text-ink"]} />
-                      Submit reports and job results
+                      Submit job results and security reports
                     </li>
                     <li class={["flex gap-2"]}>
                       <.icon name="hero-check" class={["mt-0.5 size-4 text-ink"]} />
-                      Read and independently check findings
+                      Not independent verification (mint a verify-scoped token in settings if needed)
                     </li>
                   </ul>
                 </div>
@@ -169,7 +169,7 @@ defmodule TarakanWeb.ClientAuthorizationLive do
                 <p class={["mt-5 text-xs leading-5 text-ink-faint"]}>
                   A revocable credential will be created for
                   <span class={["font-mono"]}>@{@current_scope.account.handle}</span>
-                  and expire after 30 days.
+                  and expire after {ClientAuthorizations.credential_validity_days()} days.
                 </p>
 
                 <div class={["mt-6 grid gap-3 sm:grid-cols-2"]}>

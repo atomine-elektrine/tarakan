@@ -23,7 +23,12 @@ defmodule TarakanWeb.RepositoryLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Public security for open source")
+     |> assign(:page_title, "Distributed reviews. One trusted record.")
+     |> assign(
+       :meta_description,
+       "Distributed reviews. One trusted record. The web app coordinates open work; tarakan-client runs your reviewer and submits evidence on exact commits."
+     )
+     |> assign(:canonical_path, ~p"/")
      |> assign(:stats, Repositories.registry_stats())
      |> assign(:contributor_count, Scans.public_contributor_count())
      |> assign(:open_tasks, Work.list_open_public_tasks())

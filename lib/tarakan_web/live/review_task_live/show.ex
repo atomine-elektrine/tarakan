@@ -18,6 +18,8 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
     {:ok,
      socket
      |> assign(:page_title, task.title)
+     |> assign(:meta_description, task_meta_description(task))
+     |> assign(:canonical_path, ~p"/requests/#{task.id}")
      |> assign_task(task)
      |> assign(:decision_form, decision_form())
      |> assign(:disclosure_form, disclosure_form())}
@@ -387,6 +389,23 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
 
   defp error_message({:error, :unauthorized}), do: "You are not authorized for that action."
   defp error_message({:error, _reason}), do: "The action could not be completed."
+
+  defp task_meta_description(task) do
+    repo =
+      case task.repository do
+        %{owner: owner, name: name} -> "#{owner}/#{name}"
+        _ -> "open source"
+      end
+
+    kind = task.kind |> to_string() |> String.replace("_", " ")
+    status = task.status |> to_string() |> String.replace("_", " ")
+
+    desc =
+      "Open security job on #{repo}: #{task.title}. " <>
+        "#{String.capitalize(kind)} · #{status}. Claim on Tarakan."
+
+    String.slice(String.replace(desc, ~r/\s+/, " "), 0, 160)
+  end
 
   defp kind_label("code_review"), do: "Code review"
   defp kind_label("threat_model"), do: "Threat model"

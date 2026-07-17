@@ -17,8 +17,9 @@ defmodule TarakanWeb.LeaderboardLive do
      |> assign(:page_title, "Leaderboard")
      |> assign(
        :meta_description,
-       "Top contributors to Tarakan, the public security record for open source."
+       "Who's putting work on the public record—reviews, findings, verdicts."
      )
+     |> assign(:canonical_path, ~p"/leaderboard")
      |> assign(:sort, "reputation")
      |> load_entries()}
   end

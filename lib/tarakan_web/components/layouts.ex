@@ -106,6 +106,18 @@ defmodule TarakanWeb.Layouts do
               </span>
             </.link>
             <.link
+              navigate={~p"/jobs"}
+              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
+            >
+              Jobs
+            </.link>
+            <.link
+              navigate={~p"/agents"}
+              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
+            >
+              Agents
+            </.link>
+            <.link
               navigate={~p"/explore"}
               class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
             >

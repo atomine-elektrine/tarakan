@@ -17,7 +17,7 @@ defmodule TarakanWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico)
+  def static_paths, do: ~w(assets fonts images favicon.ico install.sh)
 
   def router do
     quote do

@@ -62,6 +62,9 @@ config :tarakan, Tarakan.GitSSH,
   port: 2222,
   host_key_dir: "priv/ssh"
 
+# Cap concurrent git upload-pack/receive-pack processes (HTTP RPC + SSH).
+config :tarakan, Tarakan.Git.Concurrency, max_concurrent: 32
+
 config :tarakan, Oban,
   engine: Oban.Engines.Basic,
   repo: Tarakan.Repo,

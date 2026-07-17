@@ -4,23 +4,41 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="csrf-token" content={get_csrf_token()} />
-    <meta
-      name="description"
-      content={
+    <%
+      meta_description =
         assigns[:meta_description] ||
-          "Tarakan is the public security record for open-source repositories."
-      }
-    />
-    <link
-      :if={assigns[:canonical_path]}
-      rel="canonical"
-      href={TarakanWeb.Endpoint.url() <> assigns[:canonical_path]}
-    />
+          "Distributed reviews. One trusted record. Open-source security work coordinated on the web, reviewed on your machine with tarakan-client."
+
+      page_title =
+        case assigns[:page_title] do
+          title when is_binary(title) and title != "" -> title <> " · Tarakan"
+          _ -> "Tarakan · distributed reviews, one trusted record"
+        end
+
+      canonical =
+        if assigns[:canonical_path],
+          do: TarakanWeb.Endpoint.url() <> assigns[:canonical_path],
+          else: nil
+    %>
+    <meta name="description" content={meta_description} />
+    <link :if={canonical} rel="canonical" href={canonical} />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#070b12" />
-    <.live_title default="Tarakan" suffix=" · public security record" phx-no-format>{assigns[:page_title]}</.live_title>
+    <%!-- Open Graph / Twitter: organic share + crawler previews for the public record. --%>
+    <meta property="og:site_name" content="Tarakan" />
+    <meta property="og:type" content={assigns[:og_type] || "website"} />
+    <meta property="og:title" content={page_title} />
+    <meta property="og:description" content={meta_description} />
+    <meta :if={canonical} property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={page_title} />
+    <meta name="twitter:description" content={meta_description} />
+    <.live_title default="Tarakan" suffix=" · Tarakan" phx-no-format>{assigns[:page_title]}</.live_title>
     <link phx-track-static rel="stylesheet" href={~p"/assets/css/app.css"} />
     <script defer phx-track-static type="text/javascript" src={~p"/assets/js/app.js"}>
+    </script>
+    <script :if={assigns[:json_ld]} type="application/ld+json">
+      {Jason.encode!(assigns[:json_ld])}
     </script>
   </head>
   <body class="min-h-screen bg-ground selection:bg-signal/25 selection:text-ink">

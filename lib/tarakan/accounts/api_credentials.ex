@@ -9,11 +9,15 @@ defmodule Tarakan.Accounts.ApiCredentials do
   alias Tarakan.Audit
   alias Tarakan.Repo
 
-  @default_validity_days 30
+  @default_validity_days 14
+  @maximum_validity_days 30
   @maximum_active_credentials 10
-  @default_scopes ~w(tasks:read)
+  # Settings form default: agent work queue, not independent verification.
+  @default_scopes ~w(tasks:read tasks:claim contributions:write reviews:submit)
 
   def default_scopes, do: @default_scopes
+  def default_validity_days, do: @default_validity_days
+  def maximum_validity_days, do: @maximum_validity_days
 
   def create(%Account{} = account, attrs \\ %{}) do
     result =
@@ -30,14 +34,13 @@ defmodule Tarakan.Accounts.ApiCredentials do
         end
 
         token = "trkn_" <> (:crypto.strong_rand_bytes(32) |> Base.url_encode64(padding: false))
-        expires_at = DateTime.add(DateTime.utc_now(), @default_validity_days, :day)
 
         attrs =
           attrs
           |> Map.new(fn {key, value} -> {to_string(key), value} end)
           |> Map.put_new("name", "Tarakan Client")
           |> Map.put_new("scopes", @default_scopes)
-          |> Map.put("expires_at", expires_at)
+          |> put_expires_at()
 
         changeset =
           %ApiCredential{}
@@ -193,6 +196,44 @@ defmodule Tarakan.Accounts.ApiCredentials do
 
   def scope_granted?(%ApiCredential{scopes: scopes}, scope), do: scope in scopes
   def scope_granted?(_credential, _scope), do: false
+
+  # Lifetime is always capped at @maximum_validity_days so callers cannot mint
+  # long-lived agent tokens via attrs.
+  defp put_expires_at(attrs) do
+    now = DateTime.utc_now()
+    max_expires = DateTime.add(now, @maximum_validity_days, :day)
+
+    requested =
+      case Map.get(attrs, "expires_at") do
+        %DateTime{} = expires_at ->
+          expires_at
+
+        _missing ->
+          DateTime.add(now, validity_days(Map.get(attrs, "validity_days")), :day)
+      end
+
+    expires_at =
+      cond do
+        DateTime.compare(requested, now) != :gt -> DateTime.add(now, 1, :day)
+        DateTime.compare(requested, max_expires) == :gt -> max_expires
+        true -> requested
+      end
+
+    Map.put(attrs, "expires_at", expires_at)
+  end
+
+  defp validity_days(days) when is_integer(days) and days > 0 do
+    min(days, @maximum_validity_days)
+  end
+
+  defp validity_days(days) when is_binary(days) do
+    case Integer.parse(days) do
+      {n, ""} when n > 0 -> min(n, @maximum_validity_days)
+      _other -> @default_validity_days
+    end
+  end
+
+  defp validity_days(_other), do: @default_validity_days
 
   defp active_count(%Account{id: account_id}) do
     now = DateTime.utc_now()

@@ -46,6 +46,12 @@ defmodule Tarakan.ApiCredentialsTest do
              ApiCredentials.create(account, %{name: "bounded", expires_at: requested})
 
     assert DateTime.diff(credential.expires_at, DateTime.utc_now(), :day) in 29..30
+
+    assert {:ok, _token, short} =
+             ApiCredentials.create(account, %{name: "short", validity_days: 7})
+
+    assert DateTime.diff(short.expires_at, DateTime.utc_now(), :day) in 6..7
+
     assert {:ok, _, _} = ApiCredentials.authenticate(token)
     assert :error = ApiCredentials.authenticate("trkn_" <> String.duplicate("!", 43))
     assert :error = ApiCredentials.authenticate("trkn_short")

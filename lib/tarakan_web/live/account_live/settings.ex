@@ -6,6 +6,7 @@ defmodule TarakanWeb.AccountLive.Settings do
   alias Tarakan.Accounts
   alias Tarakan.Accounts.{ApiCredential, ApiCredentials, SshKeys}
   alias Tarakan.Repositories
+  alias TarakanWeb.AccountAuth
 
   @impl true
   def render(assigns) do
@@ -110,7 +111,7 @@ defmodule TarakanWeb.AccountLive.Settings do
           <section id="api-token" class="mt-5 border-2 border-strong bg-panel p-6">
             <h2 class="text-sm font-semibold text-ink">Client credentials</h2>
             <p class="mt-1 text-xs leading-5 text-ink-faint">
-              <span class="font-mono">TARAKAN_API_TOKEN</span>, sent as <span class="font-mono">Authorization: Bearer &lt;token&gt;</span>. Expires after 30 days.
+              <span class="font-mono">TARAKAN_API_TOKEN</span>, sent as <span class="font-mono">Authorization: Bearer &lt;token&gt;</span>. Defaults expire after {ApiCredentials.default_validity_days()} days (max {ApiCredentials.maximum_validity_days()}).
             </p>
             <div :if={@api_token} class="mt-4">
               <p class="font-mono text-[11px] text-ink-faint">
@@ -437,22 +438,25 @@ defmodule TarakanWeb.AccountLive.Settings do
 
   def handle_event("update_email", params, socket) do
     %{"account" => account_params} = params
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
 
-    case Accounts.change_account_email(account, account_params) do
-      %{valid?: true} = changeset ->
-        Accounts.deliver_account_update_email_instructions(
-          Ecto.Changeset.apply_action!(changeset, :insert),
-          account.email,
-          &url(~p"/accounts/settings/confirm-email/#{&1}")
-        )
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account do
+      case Accounts.change_account_email(account, account_params) do
+        %{valid?: true} = changeset ->
+          Accounts.deliver_account_update_email_instructions(
+            Ecto.Changeset.apply_action!(changeset, :insert),
+            account.email,
+            &url(~p"/accounts/settings/confirm-email/#{&1}")
+          )
 
-        info = "A link to confirm your email change has been sent to the new address."
-        {:noreply, socket |> put_flash(:info, info)}
+          info = "A link to confirm your email change has been sent to the new address."
+          {:noreply, socket |> put_flash(:info, info)}
 
-      changeset ->
-        {:noreply, assign(socket, :email_form, to_form(changeset, action: :insert))}
+        changeset ->
+          {:noreply, assign(socket, :email_form, to_form(changeset, action: :insert))}
+      end
+    else
+      {:error, :sudo_required} -> reauth_settings(socket)
     end
   end
 
@@ -469,10 +473,9 @@ defmodule TarakanWeb.AccountLive.Settings do
   end
 
   def handle_event("generate_api_token", %{"credential" => params}, socket) do
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
-
-    with {:ok, repository_id} <- credential_repository_id(socket, params["repository"]),
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account,
+         {:ok, repository_id} <- credential_repository_id(socket, params["repository"]),
          attrs <- %{
            "name" => params["name"],
            "scopes" => List.wrap(params["scopes"]),
@@ -486,6 +489,9 @@ defmodule TarakanWeb.AccountLive.Settings do
          credential_form: credential_form()
        )}
     else
+      {:error, :sudo_required} ->
+        reauth_settings(socket)
+
       {:error, :repository_not_found} ->
         {:noreply,
          socket
@@ -518,15 +524,16 @@ defmodule TarakanWeb.AccountLive.Settings do
   end
 
   def handle_event("revoke_api_credential", %{"id" => credential_id}, socket) do
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
-
-    case ApiCredentials.revoke(account, credential_id) do
-      {:ok, _credential} ->
-        {:noreply,
-         socket
-         |> assign(:api_credentials, ApiCredentials.list(account))
-         |> put_flash(:info, "Client credential revoked.")}
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account,
+         {:ok, _credential} <- ApiCredentials.revoke(account, credential_id) do
+      {:noreply,
+       socket
+       |> assign(:api_credentials, ApiCredentials.list(account))
+       |> put_flash(:info, "Client credential revoked.")}
+    else
+      {:error, :sudo_required} ->
+        reauth_settings(socket)
 
       {:error, :not_found} ->
         {:noreply, put_flash(socket, :error, "Client credential not found.")}
@@ -534,56 +541,75 @@ defmodule TarakanWeb.AccountLive.Settings do
   end
 
   def handle_event("add_ssh_key", %{"ssh_key" => params}, socket) do
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account do
+      case SshKeys.add_key(account, params) do
+        {:ok, _key} ->
+          {:noreply,
+           socket
+           |> assign(:ssh_keys, SshKeys.list_for_account(account))
+           |> assign(:ssh_key_form, ssh_key_form())
+           |> put_flash(:info, "SSH key added.")}
 
-    case SshKeys.add_key(account, params) do
-      {:ok, _key} ->
-        {:noreply,
-         socket
-         |> assign(:ssh_keys, SshKeys.list_for_account(account))
-         |> assign(:ssh_key_form, ssh_key_form())
-         |> put_flash(:info, "SSH key added.")}
+        {:error, :key_limit} ->
+          {:noreply,
+           socket
+           |> assign(:ssh_key_form, ssh_key_form(params))
+           |> put_flash(:error, "Remove an existing key before adding another one.")}
 
-      {:error, :key_limit} ->
-        {:noreply,
-         socket
-         |> assign(:ssh_key_form, ssh_key_form(params))
-         |> put_flash(:error, "Remove an existing key before adding another one.")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :ssh_key_form, to_form(changeset, as: :ssh_key))}
+        {:error, %Ecto.Changeset{} = changeset} ->
+          {:noreply, assign(socket, :ssh_key_form, to_form(changeset, as: :ssh_key))}
+      end
+    else
+      {:error, :sudo_required} -> reauth_settings(socket)
     end
   end
 
   def handle_event("delete_ssh_key", %{"id" => key_id}, socket) do
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
-
-    case SshKeys.delete_key(account, key_id) do
-      {:ok, _key} ->
-        {:noreply,
-         socket
-         |> assign(:ssh_keys, SshKeys.list_for_account(account))
-         |> put_flash(:info, "SSH key removed.")}
-
-      {:error, :not_found} ->
-        {:noreply, put_flash(socket, :error, "SSH key not found.")}
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account,
+         {:ok, _key} <- SshKeys.delete_key(account, key_id) do
+      {:noreply,
+       socket
+       |> assign(:ssh_keys, SshKeys.list_for_account(account))
+       |> put_flash(:info, "SSH key removed.")}
+    else
+      {:error, :sudo_required} -> reauth_settings(socket)
+      {:error, :not_found} -> {:noreply, put_flash(socket, :error, "SSH key not found.")}
     end
   end
 
   def handle_event("update_password", params, socket) do
     %{"account" => account_params} = params
-    account = socket.assigns.current_scope.account
-    true = Accounts.sudo_mode?(account)
 
-    case Accounts.change_account_password(account, account_params) do
-      %{valid?: true} = changeset ->
-        {:noreply, assign(socket, trigger_submit: true, password_form: to_form(changeset))}
+    with :ok <- ensure_sudo(socket),
+         account <- socket.assigns.current_scope.account do
+      case Accounts.change_account_password(account, account_params) do
+        %{valid?: true} = changeset ->
+          {:noreply, assign(socket, trigger_submit: true, password_form: to_form(changeset))}
 
-      changeset ->
-        {:noreply, assign(socket, password_form: to_form(changeset, action: :insert))}
+        changeset ->
+          {:noreply, assign(socket, password_form: to_form(changeset, action: :insert))}
+      end
+    else
+      {:error, :sudo_required} -> reauth_settings(socket)
     end
+  end
+
+  defp ensure_sudo(socket) do
+    if Accounts.sudo_mode?(socket.assigns.current_scope.account),
+      do: :ok,
+      else: {:error, :sudo_required}
+  end
+
+  defp reauth_settings(socket) do
+    {:noreply,
+     socket
+     |> put_flash(
+       :error,
+       "Confirm it's you with a magic link before changing sensitive settings."
+     )
+     |> redirect(to: AccountAuth.reauth_path(~p"/accounts/settings"))}
   end
 
   defp credential_status(%ApiCredential{revoked_at: %DateTime{}}), do: "revoked"

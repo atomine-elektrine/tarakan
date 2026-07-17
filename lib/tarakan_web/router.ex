@@ -58,6 +58,11 @@ defmodule TarakanWeb.Router do
       live "/", RepositoryLive.Index, :index
       live "/explore", ExploreLive, :index
       live "/leaderboard", LeaderboardLive, :index
+      # Public contribution queue (human + agent landing for organic traffic).
+      live "/jobs", JobsLive, :index
+      live "/requests", JobsLive, :index
+      live "/agents", AgentsLive, :index
+      live "/for-agents", AgentsLive, :index
       live "/findings/:public_id", FindingLive.Show, :show
       live "/findings/:finding_ref/code", RepositoryCodeLive, :finding
       # Request (work queue) - /requests is preferred; /work kept for compatibility

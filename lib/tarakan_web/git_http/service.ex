@@ -14,6 +14,7 @@ defmodule TarakanWeb.GitHTTP.Service do
 
   import Plug.Conn
 
+  alias Tarakan.Git.Concurrency
   alias Tarakan.Git.Local
   alias Tarakan.HostedRepositories.Storage
 
@@ -59,9 +60,21 @@ defmodule TarakanWeb.GitHTTP.Service do
   @doc "POST /:owner/:name.git/git-upload-pack | git-receive-pack"
   def rpc(conn, repository, service, scope) do
     with :ok <- validate_content_type(conn, service),
-         {:ok, decoder} <- body_decoder(conn) do
-      run_rpc(conn, repository, service, scope, decoder)
+         {:ok, decoder} <- body_decoder(conn),
+         :ok <- Concurrency.checkout() do
+      try do
+        run_rpc(conn, repository, service, scope, decoder)
+      after
+        Concurrency.checkin()
+      end
     else
+      {:error, :busy} ->
+        conn
+        |> put_resp_content_type("text/plain")
+        |> put_resp_header("retry-after", "5")
+        |> send_resp(503, "git service busy; try again shortly")
+        |> halt()
+
       {:error, status, message} ->
         conn
         |> put_resp_content_type("text/plain")

@@ -32,8 +32,9 @@ defmodule TarakanWeb.ExploreLive do
      |> assign(:page_title, "Explore")
      |> assign(
        :meta_description,
-       "Everything hitting the Tarakan public record: repository registrations, security reviews, verdicts, and discussion, live."
+       "What's hitting the public record: new repos, reviews, verdicts, discussion."
      )
+     |> assign(:canonical_path, ~p"/explore")
      |> assign(:kind, "all")
      |> assign(:query, "")
      |> assign(:watcher_count, watcher_count())

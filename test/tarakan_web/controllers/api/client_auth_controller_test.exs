@@ -48,10 +48,18 @@ defmodule TarakanWeb.API.ClientAuthControllerTest do
     assert exchange_response["token"] =~ "trkn_"
     assert exchange_response["token_type"] == "Bearer"
     assert "tasks:read" in exchange_response["scopes"]
-    assert "reviews:verify" in exchange_response["scopes"]
+    assert "tasks:claim" in exchange_response["scopes"]
+    assert "contributions:write" in exchange_response["scopes"]
+    assert "reviews:submit" in exchange_response["scopes"]
+    refute "reviews:verify" in exchange_response["scopes"]
+    refute "reviews:read" in exchange_response["scopes"]
 
     assert {:ok, ^account, credential} = ApiCredentials.authenticate(exchange_response["token"])
     assert credential.name == "Tarakan CLI on laptop"
+
+    # Device-minted credentials are short-lived (agent blast-radius control).
+    expires_in_days = DateTime.diff(credential.expires_at, DateTime.utc_now(), :day)
+    assert expires_in_days in 6..7
 
     consumed =
       build_conn()

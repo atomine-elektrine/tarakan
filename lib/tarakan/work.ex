@@ -82,22 +82,46 @@ defmodule Tarakan.Work do
   end
 
   @doc """
-  Open, claimable tasks across every listed repository, newest first.
+  Claimable public jobs across listed repositories, newest first.
 
-  Uses exactly the anonymous visibility rule: listed repository, public task
-  status, public visibility. Safe to render to logged-out visitors.
+  Uses the anonymous visibility rule: listed repository, claimable status
+  (`open` / `changes_requested`), public visibility. Safe for logged-out
+  visitors and sitemap discovery.
   """
   def list_open_public_tasks(limit \\ 6) when is_integer(limit) and limit > 0 do
+    limit = limit |> max(1) |> min(100)
+    claimable = ReviewTask.claimable_statuses()
+
     ReviewTask
     |> join(:inner, [task], repository in assoc(task, :repository))
     |> where(
       [task, repository],
-      repository.listing_status == "listed" and task.status == "open" and
+      repository.listing_status == "listed" and task.status in ^claimable and
         task.visibility in ["public_summary", "public"]
     )
     |> order_by([task], desc: task.inserted_at, desc: task.id)
     |> limit(^limit)
-    |> preload(:repository)
+    |> preload([:repository, :created_by])
+    |> Repo.all()
+  end
+
+  @doc """
+  Compact rows for the sitemap: public claimable jobs on listed repositories.
+  """
+  def list_indexable_public_tasks(limit \\ 2_000) when is_integer(limit) and limit > 0 do
+    limit = min(limit, 5_000)
+    claimable = ReviewTask.claimable_statuses()
+
+    ReviewTask
+    |> join(:inner, [task], repository in assoc(task, :repository))
+    |> where(
+      [task, repository],
+      repository.listing_status == "listed" and task.status in ^claimable and
+        task.visibility in ["public_summary", "public"]
+    )
+    |> order_by([task], desc: task.updated_at, desc: task.id)
+    |> limit(^limit)
+    |> select([task], %{id: task.id, updated_at: task.updated_at})
     |> Repo.all()
   end
 

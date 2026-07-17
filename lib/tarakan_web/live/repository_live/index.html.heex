@@ -8,21 +8,27 @@
         </h1>
 
         <p class="mt-6 max-w-md text-pretty text-sm leading-6 text-ink-muted sm:text-base sm:leading-7">
-          Tarakan is collective security auditing for open source. Contributors and their agents
-          review the same commits and check each other's work. All of it stays public.
+          Distributed reviews. One trusted record.
         </p>
 
-        <div
-          :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
-          id="repository-auth-gate"
-          class="mt-9"
-        >
-          <.link
-            id="account-login-button"
-            href={~p"/auth/github?return_to=/"}
-            class="clip-notch inline-flex items-center justify-center gap-3 bg-btn px-6 py-3.5 font-display text-sm uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
+        <div class="mt-9 flex flex-wrap items-center gap-3">
+          <div
+            :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
+            id="repository-auth-gate"
           >
-            Create an account or sign in
+            <.link
+              id="account-login-button"
+              href={~p"/auth/github?return_to=/"}
+              class="clip-notch inline-flex items-center justify-center gap-3 bg-btn px-6 py-3.5 font-display text-sm uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
+            >
+              Sign in
+            </.link>
+          </div>
+          <.link
+            navigate={~p"/agents"}
+            class="inline-flex items-center justify-center border-2 border-strong px-5 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink transition hover:bg-panel"
+          >
+            Claim work with the client
           </.link>
         </div>
       </div>
@@ -265,21 +271,29 @@
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-            Contribute
+            Right now
           </p>
           <h2 class="mt-2 font-display text-3xl font-medium uppercase leading-none tracking-[0.03em] text-ink sm:text-4xl">
             Open work
           </h2>
           <p class="mt-3 max-w-xl text-sm leading-6 text-ink-muted">
-            Review a repository that has not been covered yet, or claim a job tied to a specific commit.
+            Repos waiting for a first look, and jobs someone already asked for.
           </p>
         </div>
-        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-          {length(@scan_queue)} to review · {length(@open_tasks)} open {if length(@open_tasks) ==
-                                                                             1,
-                                                                           do: "job",
-                                                                           else: "jobs"}
-        </p>
+        <div class="flex flex-col items-start gap-2 sm:items-end">
+          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+            {length(@scan_queue)} to review · {length(@open_tasks)} open {if length(@open_tasks) ==
+                                                                               1,
+                                                                             do: "job",
+                                                                             else: "jobs"}
+          </p>
+          <.link
+            navigate={~p"/jobs"}
+            class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-signal transition hover:underline"
+          >
+            All jobs →
+          </.link>
+        </div>
       </div>
 
       <div class="block">
@@ -295,7 +309,7 @@
                 </span>
               </div>
               <p class="mt-1.5 text-xs leading-5 text-ink-muted">
-                These public repositories do not have a submitted review yet. Choose one and review a pinned commit.
+                No review on the record yet. Pick one and pin a commit.
               </p>
             </div>
 
@@ -352,7 +366,7 @@
                 Open jobs
               </h3>
               <p class="mt-1.5 text-xs leading-5 text-ink-muted">
-                Community requests tied to a specific commit and review goal.
+                Someone asked for a review on a specific commit.
               </p>
             </div>
 
@@ -412,6 +426,7 @@
           </code>
           <p class="mt-2 text-xs leading-5 text-ink-faint">
             Codex, Claude, Grok, Ollama, and OpenRouter are supported. Provider credentials stay with the local tool.
+            <.link navigate={~p"/agents"} class="text-signal hover:underline">Install</.link>
           </p>
         </div>
       </div>

@@ -45,7 +45,15 @@ defmodule TarakanWeb.RepositoryLive.Show do
 
     {:ok,
      socket
-     |> assign(:page_title, "#{repository.owner}/#{repository.name}")
+     |> assign(:page_title, "#{repository.owner}/#{repository.name} security")
+     |> assign(
+       :meta_description,
+       repository_meta_description(repository)
+     )
+     |> assign(
+       :canonical_path,
+       TarakanWeb.RepositoryPaths.repository_security_path(repository)
+     )
      |> assign(:repository, repository)
      |> assign(:task_form, to_form(Work.change_task(), as: :review_task))
      |> assign(:show_task_form, false)
@@ -488,6 +496,24 @@ defmodule TarakanWeb.RepositoryLive.Show do
 
   defp finding_lines(%{line_start: line_start, line_end: line_end}),
     do: ":#{line_start}-#{line_end}"
+
+  defp repository_meta_description(repository) do
+    status = repository.status || "unscanned"
+    findings = repository.open_findings_count || 0
+    host = repository.host || "github.com"
+
+    base =
+      "Public security record for #{repository.owner}/#{repository.name} on #{host}. " <>
+        "Status: #{status}."
+
+    detail =
+      cond do
+        findings > 0 -> " #{findings} open finding#{if findings == 1, do: "", else: "s"}."
+        true -> " Contribute a review or claim an open job."
+      end
+
+    String.slice(base <> detail, 0, 160)
+  end
 
   # Mass UI: Report job + Check job first; advanced kinds still available.
   defp task_kind_options do
