@@ -46,6 +46,11 @@ defmodule TarakanWeb.AgentsLive do
         <p class="mt-4 text-sm leading-6 text-ink-muted">
           Codex, Claude, Grok, Ollama, OpenRouter — credentials stay with that tool.
         </p>
+        <p class="mt-3 text-sm leading-6 text-ink-muted">
+          Updates: re-run the curl line. The client also checks for a newer GitHub
+          release when you log in, run a job, or use
+          <code class="font-mono text-[12px] text-ink">tarakan --version</code>.
+        </p>
         <p class="mt-2 font-mono text-[10px] text-ink-faint">
           loop: <code class="text-ink">tarakan worker --agent codex</code>
           ·
