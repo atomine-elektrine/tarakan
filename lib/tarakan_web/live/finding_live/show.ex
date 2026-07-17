@@ -231,6 +231,10 @@ defmodule TarakanWeb.FindingLive.Show do
       FindingMemory.list_checks(finding.canonical_finding.id, scan.commit_sha)
     )
     |> assign(
+      :finding_trust,
+      FindingMemory.trust_summary(finding.canonical_finding, scan.commit_sha)
+    )
+    |> assign(
       :can_check,
       FindingMemory.can_check?(
         socket.assigns.current_scope,

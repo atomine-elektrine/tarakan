@@ -191,7 +191,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
 
       {:ok, view, _html} = live(conn, ~p"/github.com/openai/codex/security")
 
-      assert has_element?(view, "#scans-#{scan.id}", "Submitted (not accepted)")
+      assert has_element?(view, "#scans-#{scan.id}", "Awaiting independent check")
       assert has_element?(view, "#scans-#{scan.id}", "1 finding")
       assert has_element?(view, "#scans-#{scan.id}", "lib/example/module_1.ex")
       refute has_element?(view, "#scans-#{restricted.id}")
@@ -249,7 +249,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
       assert has_element?(view, "#scans article", "No findings reported")
       assert has_element?(view, "#scans article", "2 findings")
       assert has_element?(view, "#scans article", "lib/example/module_1.ex:10-15")
-      assert has_element?(view, "#repository-status", "findings")
+      assert has_element?(view, "#repository-status", "2 open")
       assert has_element?(view, "#scan-count", "2")
       assert has_element?(view, "#open-findings-count", "2")
       assert has_element?(view, "#canonical-findings", "2 unique open")
@@ -414,7 +414,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
 
       assert has_element?(view, "#scans-#{scan.id}", "Accepted")
       assert has_element?(view, "#scans-#{scan.id}", "Restore full evidence")
-      assert has_element?(view, "#repository-status", "reviewed")
+      assert has_element?(view, "#repository-status", "Clear")
       assert has_element?(view, "#scan-count", "1")
     end
 
@@ -444,7 +444,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
       {:ok, view, _html} = live(conn, ~p"/github.com/openai/codex/security")
 
       assert has_element?(view, "#scan-count", "0")
-      assert has_element?(view, "#repository-status", "unscanned")
+      assert has_element?(view, "#repository-status", "Not reviewed")
 
       scan = scan_fixture(repository, submitter, %{"findings_json" => findings_json_fixture(1)})
 
@@ -452,7 +452,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
 
       assert has_element?(view, "#scans-#{scan.id}")
       assert has_element?(view, "#scan-count", "1")
-      assert has_element?(view, "#repository-status", "findings")
+      assert has_element?(view, "#repository-status", "1 open")
     end
   end
 
@@ -484,6 +484,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
       conn = log_in_account(conn, creator)
       {:ok, view, _html} = live(conn, ~p"/github.com/openai/codex/security")
 
+      assert has_element?(view, "#quick-open-job-button")
       view |> element("#propose-task-toggle") |> render_click()
 
       view
@@ -492,6 +493,52 @@ defmodule TarakanWeb.RepositoryLiveTest do
 
       assert has_element?(view, "#review-tasks article", "Map the authorization boundary")
       assert has_element?(view, "#review-tasks article", "Human-authored required")
+    end
+
+    test "a moderator can one-click open a default security report job", %{
+      conn: conn,
+      repository: repository
+    } do
+      moderator = moderator_account_fixture()
+
+      {:ok, view, _html} =
+        conn
+        |> log_in_account(moderator)
+        |> live(~p"/github.com/openai/codex/security")
+
+      view |> element("#quick-open-job-button") |> render_click()
+
+      assert render(view) =~ "Job opened on the public queue"
+
+      assert [task] = Work.list_tasks(repository)
+      assert task.kind == "code_review"
+      assert task.capability == "agent"
+      assert task.status == "open"
+    end
+
+    test "customize form can switch the branch tip into the commit field", %{
+      conn: conn,
+      creator: creator
+    } do
+      {:ok, view, _html} =
+        conn
+        |> log_in_account(creator)
+        |> live(~p"/github.com/openai/codex/security")
+
+      view |> element("#propose-task-toggle") |> render_click()
+
+      assert has_element?(view, "#task-branch-select")
+      assert has_element?(view, "#task-branch-select option[value='develop']")
+
+      view
+      |> element("#task-branch-select")
+      |> render_change(%{"branch" => "develop"})
+
+      # develop tip is the stub SHA of all 8s
+      assert has_element?(
+               view,
+               "#review_task_commit_sha[value='8888888888888888888888888888888888888888']"
+             )
     end
 
     test "a contributor can propose a check for an existing report", %{
@@ -536,8 +583,13 @@ defmodule TarakanWeb.RepositoryLiveTest do
                "Check the reported authorization bypass"
              )
 
-      assert [%{target_review_id: target_review_id}] = Work.list_tasks(repository)
-      assert target_review_id == report.id
+      check_jobs =
+        repository
+        |> Work.list_tasks()
+        |> Enum.filter(&(&1.kind == "verify_findings" and &1.target_review_id == report.id))
+
+      assert Enum.any?(check_jobs, &(&1.title =~ "Check the reported authorization bypass"))
+      assert Enum.any?(check_jobs, &(&1.capability == "agent" and &1.status == "open"))
     end
   end
 

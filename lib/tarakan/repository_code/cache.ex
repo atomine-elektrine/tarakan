@@ -359,6 +359,7 @@ defmodule Tarakan.RepositoryCode.Cache do
        do: true
 
   defp repository_key?({:github_tree, github_id, _tree_sha, _recursive}, github_id), do: true
+  defp repository_key?({:github_branches, github_id}, github_id), do: true
   defp repository_key?({:github_identity, github_id}, github_id), do: true
   defp repository_key?({:github_identity_stale, github_id}, github_id), do: true
   defp repository_key?(_key, _github_id), do: false
@@ -374,6 +375,10 @@ defmodule Tarakan.RepositoryCode.Cache do
        do: true
 
   defp hosted_key?({:hosted_head, repository_id}, {:hosted, repository_id}), do: true
+
+  defp hosted_key?({:hosted_branch_head, repository_id, _branch}, {:hosted, repository_id}),
+    do: true
+
   defp hosted_key?(_key, _generation_key), do: false
 
   defp repository_id({kind, github_id, _object_sha})
@@ -383,6 +388,8 @@ defmodule Tarakan.RepositoryCode.Cache do
   defp repository_id({:github_tree, github_id, _tree_sha, _recursive})
        when is_integer(github_id),
        do: github_id
+
+  defp repository_id({:github_branches, github_id}) when is_integer(github_id), do: github_id
 
   defp repository_id({:github_identity, github_id}) when is_integer(github_id), do: github_id
 
@@ -401,6 +408,10 @@ defmodule Tarakan.RepositoryCode.Cache do
 
   defp repository_id({:hosted_head, repository_id}) when is_integer(repository_id),
     do: {:hosted, repository_id}
+
+  defp repository_id({:hosted_branch_head, repository_id, _branch})
+       when is_integer(repository_id),
+       do: {:hosted, repository_id}
 
   defp repository_id(_key), do: nil
 end

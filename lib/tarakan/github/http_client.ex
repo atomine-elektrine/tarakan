@@ -161,6 +161,47 @@ defmodule Tarakan.GitHub.HTTPClient do
     end
   end
 
+  @impl true
+  def list_branches(owner, name) do
+    with :ok <- validate_identity(owner, name) do
+      owner = encode_segment(owner)
+      name = encode_segment(name)
+      # First page only — enough for typical public repos; UI can still take a raw SHA.
+      url = "#{@api_root}/repos/#{owner}/#{name}/branches?per_page=100"
+
+      case request_json(url, @max_metadata_response_bytes) do
+        {:ok, 200, body, _resp_headers} when is_list(body) ->
+          names =
+            body
+            |> Enum.map(fn
+              %{"name" => branch} when is_binary(branch) -> branch
+              _other -> nil
+            end)
+            |> Enum.reject(&is_nil/1)
+
+          {:ok, names}
+
+        {:ok, 200, _body, _resp_headers} ->
+          {:error, :invalid_response}
+
+        {:ok, status, _body, _resp_headers} when status in [404, 422] ->
+          {:error, :not_found}
+
+        {:ok, status, _body, _resp_headers} when status in [403, 429] ->
+          {:error, :rate_limited}
+
+        {:ok, _status, _body, _resp_headers} ->
+          {:error, :unavailable}
+
+        {:error, :response_too_large} ->
+          {:error, :invalid_response}
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    end
+  end
+
   @doc false
   def branch_metadata(%{"commit" => commit}) when is_map(commit) do
     commit_metadata(%{

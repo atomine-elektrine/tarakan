@@ -55,10 +55,13 @@ defmodule TarakanWeb.RepositoryLive.Show do
        TarakanWeb.RepositoryPaths.repository_security_path(repository)
      )
      |> assign(:repository, repository)
-     |> assign(:task_form, to_form(Work.change_task(), as: :review_task))
+     |> assign(:task_form, empty_task_form(repository))
      |> assign(:show_task_form, false)
      |> assign(:task_kind_options, task_kind_options())
      |> assign(:capability_options, capability_options())
+     |> assign(:branch_options, [])
+     |> assign(:selected_branch, repository.default_branch)
+     |> assign(:can_auto_open_job, can_auto_open_job?(socket, repository))
      |> assign(:moderation_form, moderation_form())
      |> assign(:can_vote, can_vote?(socket))
      |> assign(
@@ -114,7 +117,66 @@ defmodule TarakanWeb.RepositoryLive.Show do
 
   @impl true
   def handle_event("toggle_task_form", _params, socket) do
-    {:noreply, update(socket, :show_task_form, &(!&1))}
+    show = !socket.assigns.show_task_form
+
+    socket =
+      if show do
+        socket
+        |> assign(:show_task_form, true)
+        |> load_branch_options()
+        |> assign(:task_form, draft_task_form(socket.assigns.repository, %{}))
+      else
+        assign(socket, :show_task_form, false)
+      end
+
+    {:noreply, socket}
+  end
+
+  def handle_event("select_branch", %{"branch" => branch}, socket) do
+    repository = socket.assigns.repository
+    branch = String.trim(to_string(branch || ""))
+
+    case RepositoryCode.resolve_branch_commit(repository, branch) do
+      {:ok, commit_sha} ->
+        params =
+          (socket.assigns.task_form.params || %{})
+          |> Map.put("commit_sha", commit_sha)
+
+        # Clear title so it re-fills with the new short SHA.
+        params = Map.put(params, "title", "")
+
+        {:noreply,
+         socket
+         |> assign(:selected_branch, branch)
+         |> assign(:task_form, draft_task_form(repository, params))}
+
+      {:error, _reason} ->
+        {:noreply,
+         put_flash(socket, :error, "Could not resolve branch #{inspect(branch)} to a commit.")}
+    end
+  end
+
+  # One-click mass path: default-branch HEAD, code_review, agent, auto title/description.
+  # Stewards/moderators get an immediately open job; others get a proposal.
+  def handle_event(
+        "quick_open_job",
+        _params,
+        %{assigns: %{current_scope: %{account: account}}} = socket
+      )
+      when not is_nil(account) do
+    repository = socket.assigns.repository
+
+    params =
+      case RepositoryCode.resolve_default_commit(repository) do
+        {:ok, commit_sha} -> %{"commit_sha" => commit_sha}
+        {:error, _} -> %{}
+      end
+
+    create_task_from_params(socket, params)
+  end
+
+  def handle_event("quick_open_job", _params, socket) do
+    {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
   end
 
   def handle_event(
@@ -144,37 +206,35 @@ defmodule TarakanWeb.RepositoryLive.Show do
     {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
   end
 
-  # Fills the proposal form with the repository's current default-branch
-  # commit so proposers don't have to hand-copy a 40-character SHA.
+  # Fills the proposal form with the selected (or default) branch tip.
   def handle_event("use_default_commit", _params, socket) do
-    case RepositoryCode.resolve_default_commit(socket.assigns.repository) do
+    repository = socket.assigns.repository
+    branch = socket.assigns.selected_branch || repository.default_branch
+
+    result =
+      if is_binary(branch) and branch != "" do
+        RepositoryCode.resolve_branch_commit(repository, branch)
+      else
+        RepositoryCode.resolve_default_commit(repository)
+      end
+
+    case result do
       {:ok, commit_sha} ->
         params =
           (socket.assigns.task_form.params || %{})
           |> Map.put("commit_sha", commit_sha)
+          |> Map.put("title", "")
 
-        form =
-          %ReviewTask{}
-          |> Work.change_task(params)
-          |> to_form(as: :review_task)
-
-        {:noreply, assign(socket, :task_form, form)}
+        {:noreply, assign(socket, :task_form, draft_task_form(repository, params))}
 
       {:error, _reason} ->
-        {:noreply,
-         put_flash(socket, :error, "The current default-branch commit could not be resolved.")}
+        {:noreply, put_flash(socket, :error, "The branch tip could not be resolved to a commit.")}
     end
   end
 
   def handle_event("validate_task", %{"review_task" => params}, socket) do
     params = normalize_task_params(params)
-
-    form =
-      %ReviewTask{}
-      |> Work.change_task(params)
-      |> Map.put(:action, :validate)
-      |> to_form(as: :review_task)
-
+    form = draft_task_form(socket.assigns.repository, params, action: :validate)
     {:noreply, assign(socket, :task_form, form)}
   end
 
@@ -184,51 +244,47 @@ defmodule TarakanWeb.RepositoryLive.Show do
         %{assigns: %{current_scope: %{account: account}}} = socket
       )
       when not is_nil(account) do
-    params = normalize_task_params(params)
-
-    case Work.create_task(socket.assigns.repository, socket.assigns.current_scope, params) do
-      {:ok, task} ->
-        {:noreply,
-         socket
-         |> assign(:task_form, to_form(Work.change_task(), as: :review_task))
-         |> stream_insert(:tasks, task, at: 0)
-         |> put_flash(:info, "Job proposed for independent approval.")}
-
-      {:error, :commit_not_found} ->
-        {:noreply, assign_task_error(socket, params, :commit_sha, "commit was not found")}
-
-      {:error, :commit_mismatch} ->
-        {:noreply,
-         assign_task_error(socket, params, :commit_sha, "commit verification returned a mismatch")}
-
-      {:error, reason} when reason in [:rate_limited, :unavailable] ->
-        {:noreply,
-         assign_task_error(socket, params, :commit_sha, "commit could not be verified right now")}
-
-      {:error, reason} when reason in [:identity_changed, :not_public] ->
-        {:noreply,
-         assign_task_error(
-           socket,
-           params,
-           :commit_sha,
-           "repository identity is no longer confirmed public (GitHub-backed repos only - Tarakan-hosted repos use the local git object database)"
-         )}
-
-      {:error, :proposal_limit} ->
-        {:noreply, put_flash(socket, :error, "Daily review-task proposal limit reached.")}
-
-      {:error, :proposal_rate_limited} ->
-        {:noreply, put_flash(socket, :error, "Too many task proposals. Try again shortly.")}
-
-      {:error, :unauthorized} ->
-        {:noreply, put_flash(socket, :error, "This account cannot propose jobs.")}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {:noreply, assign(socket, :task_form, to_form(changeset, as: :review_task))}
-    end
+    create_task_from_params(socket, normalize_task_params(params))
   end
 
   def handle_event("create_task", _params, socket) do
+    {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
+  end
+
+  def handle_event(
+        "cancel_task",
+        %{"id" => id},
+        %{assigns: %{current_scope: %{account: account}}} = socket
+      )
+      when not is_nil(account) do
+    task =
+      Work.list_tasks(socket.assigns.repository, scope: socket.assigns.current_scope)
+      |> Enum.find(&(to_string(&1.id) == to_string(id)))
+
+    case task do
+      nil ->
+        {:noreply, put_flash(socket, :error, "Job not found.")}
+
+      task ->
+        case Work.cancel_task(task, socket.assigns.current_scope, %{
+               "reason" => "Cancelled from the repository security page by a steward or creator."
+             }) do
+          {:ok, _cancelled} ->
+            {:noreply,
+             socket
+             |> reload_tasks()
+             |> put_flash(:info, "Job cancelled.")}
+
+          {:error, :unauthorized} ->
+            {:noreply, put_flash(socket, :error, "You cannot cancel this job.")}
+
+          {:error, _} ->
+            {:noreply, put_flash(socket, :error, "Could not cancel this job.")}
+        end
+    end
+  end
+
+  def handle_event("cancel_task", _params, socket) do
     {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
   end
 
@@ -425,16 +481,164 @@ defmodule TarakanWeb.RepositoryLive.Show do
 
   defp can_vote?(socket), do: not is_nil(current_account_id(socket))
 
+  defp create_task_from_params(socket, params) do
+    params = normalize_task_params(params)
+
+    case Work.create_task(socket.assigns.repository, socket.assigns.current_scope, params) do
+      {:ok, task} ->
+        message =
+          if task.status == "open" do
+            "Job opened on the public queue."
+          else
+            "Job proposed for independent approval."
+          end
+
+        {:noreply,
+         socket
+         |> assign(:task_form, empty_task_form(socket.assigns.repository))
+         |> assign(:show_task_form, false)
+         |> stream_insert(:tasks, task, at: 0)
+         |> put_flash(:info, message)}
+
+      {:error, :commit_not_found} ->
+        {:noreply, assign_task_error(socket, params, :commit_sha, "commit was not found")}
+
+      {:error, :commit_mismatch} ->
+        {:noreply,
+         assign_task_error(socket, params, :commit_sha, "commit verification returned a mismatch")}
+
+      {:error, reason} when reason in [:rate_limited, :unavailable] ->
+        {:noreply,
+         assign_task_error(socket, params, :commit_sha, "commit could not be verified right now")}
+
+      {:error, reason} when reason in [:identity_changed, :not_public] ->
+        {:noreply,
+         assign_task_error(
+           socket,
+           params,
+           :commit_sha,
+           "repository identity is no longer confirmed public (GitHub-backed repos only - Tarakan-hosted repos use the local git object database)"
+         )}
+
+      {:error, :proposal_limit} ->
+        {:noreply, put_flash(socket, :error, "Daily review-task proposal limit reached.")}
+
+      {:error, :proposal_rate_limited} ->
+        {:noreply, put_flash(socket, :error, "Too many task proposals. Try again shortly.")}
+
+      {:error, :duplicate_job} ->
+        {:noreply,
+         put_flash(
+           socket,
+           :error,
+           "An open job already covers this commit and job type. Claim or complete that one first."
+         )}
+
+      {:error, :unauthorized} ->
+        {:noreply, put_flash(socket, :error, "This account cannot propose jobs.")}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {:noreply,
+         socket
+         |> assign(:show_task_form, true)
+         |> assign(:task_form, to_form(changeset, as: :review_task))}
+    end
+  end
+
   defp assign_task_error(socket, params, field, message) do
+    filled = Work.fill_task_defaults(socket.assigns.repository, params)
+
     form =
       %ReviewTask{}
-      |> Work.change_task(params)
+      |> Work.change_task(filled)
       |> Ecto.Changeset.add_error(field, message)
       |> Map.put(:action, :validate)
       |> to_form(as: :review_task)
 
-    assign(socket, :task_form, form)
+    socket
+    |> assign(:show_task_form, true)
+    |> assign(:task_form, form)
   end
+
+  defp empty_task_form(repository) do
+    draft_task_form(repository, %{})
+  end
+
+  defp draft_task_form(repository, params, opts \\ []) do
+    params =
+      params
+      |> maybe_default_commit(repository)
+      |> then(&Work.fill_task_defaults(repository, &1))
+
+    changeset =
+      %ReviewTask{}
+      |> Work.change_task(params)
+
+    changeset =
+      case Keyword.get(opts, :action) do
+        nil -> changeset
+        action -> Map.put(changeset, :action, action)
+      end
+
+    to_form(changeset, as: :review_task)
+  end
+
+  defp load_branch_options(socket) do
+    repository = socket.assigns.repository
+
+    case RepositoryCode.list_branches(repository) do
+      {:ok, branches} ->
+        default = repository.default_branch
+        selected = socket.assigns[:selected_branch] || default || List.first(branches)
+
+        socket
+        |> assign(:branch_options, branches)
+        |> assign(:selected_branch, selected)
+
+      {:error, _} ->
+        default = repository.default_branch
+
+        branches =
+          if is_binary(default) and default != "", do: [default], else: []
+
+        socket
+        |> assign(:branch_options, branches)
+        |> assign(:selected_branch, default)
+    end
+  end
+
+  defp maybe_default_commit(params, repository) do
+    params = for {k, v} <- params, into: %{}, do: {to_string(k), v}
+
+    if present_param?(params["commit_sha"]) do
+      params
+    else
+      case RepositoryCode.resolve_default_commit(repository) do
+        {:ok, commit_sha} -> Map.put(params, "commit_sha", commit_sha)
+        {:error, _} -> params
+      end
+    end
+  end
+
+  defp present_param?(value) when value in [nil, ""], do: false
+  defp present_param?(value) when is_binary(value), do: String.trim(value) != ""
+  defp present_param?(_), do: true
+
+  defp can_auto_open_job?(%{assigns: %{current_scope: scope}}, repository)
+       when not is_nil(scope) do
+    # publish_task is checked against the repository for stewards; moderators always can.
+    Policy.allowed?(scope, :publish_task, repository) or
+      Policy.allowed?(scope, :manage_repository, repository)
+  end
+
+  defp can_auto_open_job?(_socket, _repository), do: false
+
+  defp can_cancel_job?(task, %{account: %{id: account_id}} = scope) when not is_nil(account_id) do
+    task.status in ["proposed", "open", "claimed", "changes_requested"] and
+      Policy.allowed?(scope, :cancel_task, task)
+  end
+
+  defp can_cancel_job?(_task, _scope), do: false
 
   defp can_moderate?(scan, %{account: account} = scope) when not is_nil(account) do
     Policy.allowed?(scope, :moderate_review, scan) and scan.submitted_by_id != account.id
@@ -498,18 +702,20 @@ defmodule TarakanWeb.RepositoryLive.Show do
     do: ":#{line_start}-#{line_end}"
 
   defp repository_meta_description(repository) do
-    status = repository.status || "unscanned"
-    findings = repository.open_findings_count || 0
+    label = TarakanWeb.RepositoryComponents.repository_status_label(repository)
     host = repository.host || "github.com"
 
     base =
       "Public security record for #{repository.owner}/#{repository.name} on #{host}. " <>
-        "Status: #{status}."
+        "#{label}."
 
     detail =
       cond do
-        findings > 0 -> " #{findings} open finding#{if findings == 1, do: "", else: "s"}."
-        true -> " Contribute a review or claim an open job."
+        (repository.open_findings_count || 0) > 0 ->
+          " See open findings and open jobs."
+
+        true ->
+          " Contribute a review or claim an open job."
       end
 
     String.slice(base <> detail, 0, 160)

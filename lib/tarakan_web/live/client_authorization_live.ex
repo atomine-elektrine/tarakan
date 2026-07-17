@@ -68,21 +68,20 @@ defmodule TarakanWeb.ClientAuthorizationLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <main id="client-authorization-page" class={["mx-auto max-w-xl px-5 py-12 sm:py-20"]}>
+      <Layouts.page id="client-authorization-page" width={:compact}>
         <section class={[
           "border-2 border-strong bg-panel p-6 shadow-[8px_8px_0_0_var(--color-rule)] sm:p-8"
         ]}>
           <div class={["flex items-start gap-4"]}>
             <div class={[
-              "flex size-11 shrink-0 items-center justify-center border-2 border-strong bg-signal text-signal-fg"
+              "flex size-11 shrink-0 items-center justify-center border-2 border-strong bg-signal text-ground"
             ]}>
               <.icon name="hero-command-line" class={["size-6"]} />
             </div>
             <div class={["min-w-0"]}>
-              <p class={["font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint"]}>
-                Tarakan client
-              </p>
-              <h1 class={["mt-1 font-display text-2xl font-medium uppercase tracking-[0.04em] text-ink"]}>
+              <h1 class={[
+                "font-display text-2xl font-medium uppercase tracking-[0.04em] text-ink"
+              ]}>
                 Connect your terminal
               </h1>
               <p class={["mt-2 text-sm leading-6 text-ink-muted"]}>
@@ -95,7 +94,8 @@ defmodule TarakanWeb.ClientAuthorizationLive do
             <% is_nil(@authorization) -> %>
               <div id="client-authorization-expired" class={["mt-8 border-2 border-rule p-5"]}>
                 <p class={["text-sm text-ink"]}>
-                  That code is invalid or expired. Run <code class="font-mono">tarakan login</code> again.
+                  That code is invalid or expired. Run <code class="font-mono">tarakan login</code>
+                  again.
                 </p>
               </div>
             <% @authorization.status == "approved" -> %>
@@ -152,7 +152,7 @@ defmodule TarakanWeb.ClientAuthorizationLive do
               </div>
           <% end %>
         </section>
-      </main>
+      </Layouts.page>
     </Layouts.app>
     """
   end

@@ -8,7 +8,7 @@ defmodule TarakanWeb.AccountLive.Registration do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page width={:form} class={["py-14 sm:py-20"]}>
+      <Layouts.page width={:form}>
         <div class="text-center">
           <.header>
             Join Tarakan

@@ -60,6 +60,9 @@ defmodule TarakanWeb.RepositoryCodeLive do
        |> assign(:suspicious_controls?, false)
        |> assign(:error_kind, nil)
        |> assign(:request_id, nil)
+       |> assign(:branch_options, [])
+       |> assign(:selected_branch, repository.default_branch)
+       |> maybe_load_branch_options(action)
        |> stream_configure(:entries, dom_id: &entry_dom_id/1)
        |> stream_configure(:lines, dom_id: &line_dom_id/1)
        |> stream(:entries, [])
@@ -97,6 +100,35 @@ defmodule TarakanWeb.RepositoryCodeLive do
      |> assign(:view_state, :loading)
      |> assign(:error_kind, nil)
      |> maybe_start_request()}
+  end
+
+  # Switch the code browser to another branch tip (still commit-pinned under the hood).
+  def handle_event("select_branch", %{"branch" => branch}, socket) do
+    if socket.assigns.live_action == :finding do
+      {:noreply, put_flash(socket, :error, "Finding context is pinned to its report commit.")}
+    else
+      repository = socket.assigns.repository
+      branch = String.trim(to_string(branch || ""))
+
+      case RepositoryCode.resolve_branch_commit(repository, branch) do
+        {:ok, commit_sha} ->
+          path =
+            if is_binary(socket.assigns.path) and socket.assigns.path != "" do
+              split_path(socket.assigns.path)
+            else
+              []
+            end
+
+          {:noreply,
+           socket
+           |> assign(:selected_branch, branch)
+           |> push_navigate(to: code_path(repository, commit_sha, path))}
+
+        {:error, _reason} ->
+          {:noreply,
+           put_flash(socket, :error, "Could not resolve branch #{inspect(branch)} to a commit.")}
+      end
+    end
   end
 
   @impl true
@@ -628,6 +660,31 @@ defmodule TarakanWeb.RepositoryCodeLive do
 
   defp code_path(repository, commit_sha, path_segments),
     do: RepositoryPaths.repository_code_path(repository, commit_sha, path_segments)
+
+  # Finding views stay on their report pin; free browse can switch branches.
+  defp maybe_load_branch_options(socket, :finding), do: socket
+
+  defp maybe_load_branch_options(socket, _action) do
+    repository = socket.assigns.repository
+
+    case RepositoryCode.list_branches(repository) do
+      {:ok, branches} ->
+        socket
+        |> assign(:branch_options, branches)
+        |> assign(
+          :selected_branch,
+          socket.assigns.selected_branch || repository.default_branch || List.first(branches)
+        )
+
+      {:error, _} ->
+        default = repository.default_branch
+        branches = if is_binary(default) and default != "", do: [default], else: []
+
+        socket
+        |> assign(:branch_options, branches)
+        |> assign(:selected_branch, default)
+    end
+  end
 
   defp breadcrumb_items(path_segments) do
     path_segments

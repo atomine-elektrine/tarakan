@@ -99,27 +99,62 @@ defmodule Tarakan.RepositoryCode do
       if Repository.hosted?(repository) do
         resolve_hosted_head(repository)
       else
-        resolve_github_default_commit(repository)
+        with {:ok, metadata} <- verify_public_identity(repository),
+             repository = rebind_identity(repository, metadata),
+             branch when is_binary(branch) and branch != "" <- Map.get(metadata, :default_branch) do
+          resolve_branch_commit(repository, branch)
+        else
+          nil -> {:error, :invalid_response}
+          "" -> {:error, :invalid_response}
+          {:error, reason} -> {:error, reason}
+          _other -> {:error, :invalid_response}
+        end
       end
     end
   end
 
   def resolve_default_commit(_repository), do: {:error, :not_found}
 
-  defp resolve_github_default_commit(repository) do
-    with {:ok, metadata} <- verify_public_identity(repository),
-         repository = rebind_identity(repository, metadata),
-         branch when is_binary(branch) and branch != "" <- Map.get(metadata, :default_branch),
-         {:ok, commit} <- fetch_default_head(repository, branch),
-         :ok <- cache_commit(repository, commit) do
-      {:ok, commit.sha}
-    else
-      nil -> {:error, :invalid_response}
-      "" -> {:error, :invalid_response}
-      {:error, reason} -> {:error, reason}
-      _other -> {:error, :invalid_response}
+  @doc """
+  Resolves any branch tip to a full immutable commit SHA.
+
+  Jobs and the code browser stay commit-pinned; branches are only a way to
+  pick the tip at request time.
+  """
+  @spec resolve_branch_commit(%Repository{}, String.t()) ::
+          {:ok, String.t()} | {:error, browse_error() | :invalid_reference}
+  def resolve_branch_commit(%Repository{} = repository, branch) when is_binary(branch) do
+    with {:ok, repository} <- canonical_repository(repository),
+         {:ok, branch} <- normalize_branch_name(branch) do
+      if Repository.hosted?(repository) do
+        resolve_hosted_branch(repository, branch)
+      else
+        resolve_github_branch(repository, branch)
+      end
     end
   end
+
+  def resolve_branch_commit(_repository, _branch), do: {:error, :invalid_reference}
+
+  @doc """
+  Lists branch names for branch pickers. Default branch is first when known.
+
+  Hosted repos read local refs; GitHub-backed repos use the public API (first
+  page, up to 100 names).
+  """
+  @spec list_branches(%Repository{}) ::
+          {:ok, [String.t()]} | {:error, browse_error() | :invalid_reference}
+  def list_branches(%Repository{} = repository) do
+    with {:ok, repository} <- canonical_repository(repository) do
+      if Repository.hosted?(repository) do
+        list_hosted_branches(repository)
+      else
+        list_github_branches(repository)
+      end
+    end
+  end
+
+  def list_branches(_repository), do: {:error, :not_found}
 
   # A hosted repository's HEAD is authoritative locally; an unborn HEAD is
   # the normal state of a repository nothing has been pushed to yet.
@@ -133,6 +168,76 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :unavailable}
       end
     end)
+  end
+
+  defp resolve_hosted_branch(repository, branch) do
+    key = {:hosted_branch_head, repository.id, branch}
+
+    Cache.fetch(key, cache_ttl(:head_cache_ttl_ms, @head_ttl_ms), fn ->
+      case Local.branch_head(Storage.dir(repository), branch) do
+        {:ok, sha} -> {:ok, sha}
+        :miss -> {:error, :not_found}
+      end
+    end)
+  end
+
+  defp resolve_github_branch(repository, branch) do
+    with {:ok, metadata} <- verify_public_identity(repository),
+         repository = rebind_identity(repository, metadata),
+         {:ok, commit} <- fetch_branch_head(repository, branch),
+         :ok <- cache_commit(repository, commit) do
+      {:ok, commit.sha}
+    end
+  end
+
+  defp list_hosted_branches(repository) do
+    case Local.branches(Storage.dir(repository)) do
+      {:ok, names} -> {:ok, order_branches(names, repository.default_branch)}
+      :miss -> {:error, :unavailable}
+    end
+  end
+
+  defp list_github_branches(repository) do
+    key = {:github_branches, repository.github_id}
+
+    Cache.fetch(key, cache_ttl(:head_cache_ttl_ms, @head_ttl_ms), fn ->
+      with :ok <- upstream_preflight(repository),
+           {:ok, metadata} <- verify_public_identity(repository),
+           repository = rebind_identity(repository, metadata),
+           {:ok, names} <- GitHub.list_branches(repository.owner, repository.name) do
+        {:ok, order_branches(names, repository.default_branch || metadata[:default_branch])}
+      end
+    end)
+  end
+
+  defp order_branches(names, default_branch) do
+    names = names |> Enum.uniq() |> Enum.reject(&(&1 in [nil, ""]))
+
+    cond do
+      is_binary(default_branch) and default_branch in names ->
+        [default_branch | Enum.reject(names, &(&1 == default_branch))]
+
+      true ->
+        names
+    end
+  end
+
+  defp normalize_branch_name(branch) when is_binary(branch) do
+    branch = String.trim(branch)
+
+    cond do
+      branch == "" ->
+        {:error, :invalid_reference}
+
+      byte_size(branch) > 250 ->
+        {:error, :invalid_reference}
+
+      String.contains?(branch, ["..", "@{", "\\", "\0"]) ->
+        {:error, :invalid_reference}
+
+      true ->
+        {:ok, branch}
+    end
   end
 
   @doc "Compatibility name for resolving the repository code entry point."
@@ -290,7 +395,7 @@ defmodule Tarakan.RepositoryCode do
     end)
   end
 
-  defp fetch_default_head(repository, branch) do
+  defp fetch_branch_head(repository, branch) do
     key = {:github_head, repository.github_id, branch}
 
     Cache.fetch(key, cache_ttl(:head_cache_ttl_ms, @head_ttl_ms), fn ->
@@ -298,11 +403,9 @@ defmodule Tarakan.RepositoryCode do
            {:ok, commit} <-
              GitHub.fetch_branch_head(repository.owner, repository.name, branch),
            {:ok, commit} <- validate_commit(commit),
-           {:ok, metadata} <- verify_public_identity(repository, force: true),
-           true <- Map.get(metadata, :default_branch) == branch do
+           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
         {:ok, commit}
       else
-        false -> {:error, :unavailable}
         {:error, reason} -> {:error, reason}
         _other -> {:error, :invalid_response}
       end

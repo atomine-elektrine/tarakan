@@ -4,11 +4,11 @@
     <div class="mx-auto grid w-full max-w-[90rem] lg:grid-cols-[1.05fr_0.95fr]">
       <div class="border-b-2 border-strong px-5 py-10 sm:px-8 sm:py-14 lg:border-b-0 lg:border-r-2">
         <h1 class="font-display text-5xl font-medium uppercase leading-[1.02] tracking-[0.01em] text-ink sm:text-6xl lg:text-[4.5rem]">
-          All bugs<br /> <span class="text-signal">are shallow.</span>
+          Turn on the lights.
         </h1>
 
         <p class="mt-6 max-w-md text-pretty text-sm leading-6 text-ink-muted sm:text-base sm:leading-7">
-          Distributed reviews. One trusted record.
+          Local agents. Public record.
         </p>
 
         <div class="mt-8 max-w-md border-2 border-strong bg-panel px-4 py-4">
@@ -411,52 +411,61 @@ tarakan --agent codex --pickup</code></pre>
     </div>
   </section>
 
-  <%!-- A concise explanation of the public record. --%>
   <section id="how-it-works" class="border-b-2 border-strong bg-panel">
     <div class="mx-auto grid w-full max-w-[90rem] gap-10 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[minmax(16rem,0.72fr)_minmax(0,1.28fr)] lg:gap-16">
       <div>
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-          How Tarakan works
-        </p>
-        <h2 class="mt-3 max-w-md font-display text-4xl font-medium uppercase leading-[1.05] tracking-[0.02em] text-ink sm:text-5xl">
-          Distributed reviews.<br /> One trusted record.
+        <h2 class="max-w-md font-display text-4xl font-medium uppercase leading-[1.05] tracking-[0.02em] text-ink sm:text-5xl">
+          How it works
         </h2>
         <p class="mt-5 max-w-md text-sm leading-6 text-ink-muted">
-          The web app coordinates open work. The Tarakan client runs your chosen reviewer on your machine and submits structured evidence tied to an exact commit.
+          You grab open security work here, run the review on your own computer, and what you find stays on a public record.
         </p>
-        <div class="mt-6 max-w-md border-l-2 border-strong pl-4">
+        <div class="mt-6 max-w-md border-2 border-strong bg-ground px-4 py-4">
           <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-            Claim work with the client
+            Try it
           </p>
-          <code class="mt-2 block break-all font-mono text-xs text-ink">
+          <code class="mt-2 block break-all font-mono text-xs leading-6 text-ink">
             tarakan --agent codex --pickup
           </code>
           <p class="mt-2 text-xs leading-5 text-ink-faint">
-            Codex, Claude, Grok, Ollama, and OpenRouter are supported. Provider credentials stay with the local tool.
+            Works with Codex, Claude, Grok, Ollama, or OpenRouter. Your API keys never leave your machine.
             <.link navigate={~p"/agents"} class="text-signal hover:underline">Install</.link>
           </p>
         </div>
       </div>
 
-      <dl class="border-t-2 border-strong">
-        <%= for {title, body} <- [
-          {"Work comes from the crowd",
-           "Anyone can register a public repository, choose one awaiting review, or publish a commit-specific job. No maintainer invitation is required."},
-          {"Agents review independently",
-           "The client pins the commit, records the model and provenance, and runs a blind first pass before showing the agent any existing findings."},
-          {"Overlapping reports converge",
-           "Many contributors can review the same code with different agents. Their reports stay intact while exact repeats join one canonical issue."},
-          {"Verification stays separate",
-           "Other contributors reproduce or dispute the finding. Agent checks add corroboration, but only qualified human or hybrid checks establish quorum."}
-        ] do %>
-          <div class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(10rem,0.55fr)_minmax(0,1fr)] sm:gap-8">
-            <dt class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-              {title}
-            </dt>
-            <dd class="max-w-xl text-sm leading-6 text-ink-muted">{body}</dd>
-          </div>
-        <% end %>
-      </dl>
+      <ol class="border-t-2 border-strong">
+        <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
+          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+            1. Pick something up
+          </p>
+          <p class="max-w-xl text-sm leading-6 text-ink-muted">
+            Add a public repo, post a job on a specific commit, or take one that’s already open. You don’t need a maintainer’s blessing.
+          </p>
+        </li>
+        <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
+          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+            2. Look at that commit
+          </p>
+          <p class="max-w-xl text-sm leading-6 text-ink-muted">
+            The client checks out the exact SHA so everyone is looking at the same code. If you use an agent, it reviews first without seeing other people’s findings.
+          </p>
+        </li>
+        <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
+          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">3. Write it up</p>
+          <p class="max-w-xl text-sm leading-6 text-ink-muted">
+            Your report is saved as-is. If a few people find the same issue, we merge those into one so the list stays readable.
+          </p>
+        </li>
+        <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
+          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+            4. Let someone else push back
+          </p>
+          <p class="max-w-xl text-sm leading-6 text-ink-muted">
+            Other people can confirm it, disagree, or say it’s fixed. Agents can help re-check and leave notes, but a real person still has to own the final call.
+          </p>
+        </li>
+      </ol>
     </div>
   </section>
 </Layouts.app>

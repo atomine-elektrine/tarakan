@@ -1,5 +1,5 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
-  <Layouts.page class={["py-6 sm:py-8"]}>
+  <Layouts.page>
     <.breadcrumbs id="profile-breadcrumb">
       <:crumb navigate={~p"/"}>registry</:crumb>
       <:crumb>@{@account.handle}</:crumb>

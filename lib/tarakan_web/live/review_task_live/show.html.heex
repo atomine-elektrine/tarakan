@@ -1,5 +1,5 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
-  <Layouts.page class={["py-4 sm:py-5"]}>
+  <Layouts.page>
     <.breadcrumbs>
       <:crumb navigate={~p"/"}>registry</:crumb>
       <:crumb navigate={TarakanWeb.RepositoryPaths.repository_path(@task.repository)}>
@@ -149,13 +149,14 @@
           <% can_publish?(@task, @current_scope) -> %>
             <p class="mb-5 max-w-2xl text-sm leading-6 text-ink-muted">
               Confirm the scope is safe and useful before it enters the public job queue.
-              Repository stewards and moderators may publish, including Jobs they proposed.
+              Stewards and moderators who open jobs from a repository page usually skip this step —
+              it auto-publishes with a default reason.
             </p>
             <.form for={@decision_form} id="publish-review-task-form" phx-submit="publish">
               <.input
                 field={@decision_form[:reason]}
                 type="textarea"
-                label="Approval reason"
+                label="Approval reason (pre-filled — edit if you want)"
                 placeholder="Why is this job safe, scoped, and useful?"
               />
               <button

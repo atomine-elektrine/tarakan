@@ -12,7 +12,7 @@ defmodule TarakanWeb.AccountLive.Settings do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page width={:focused} class={["py-4 sm:py-5"]}>
+      <Layouts.page width={:focused}>
         <div class="mx-auto max-w-3xl">
           <div class="text-center">
             <.header>

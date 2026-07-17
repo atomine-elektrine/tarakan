@@ -32,10 +32,10 @@ defmodule TarakanWeb.Layouts do
   end
 
   @doc """
-  Provides the shared horizontal rail for application pages.
+  Shared page shell: gutters, max width, and vertical padding under the nav.
 
-  Wide pages use the full application canvas, while focused tasks and forms
-  keep a deliberate reading width without changing the responsive gutters.
+  All app pages should use this so spacing stays consistent. Pass `class` only
+  for extras (e.g. `space-y-5`), not for competing padding.
   """
   attr :id, :string, default: nil
   attr :width, :atom, default: :wide, values: [:wide, :focused, :compact, :form]
@@ -47,14 +47,18 @@ defmodule TarakanWeb.Layouts do
     ~H"""
     <div
       id={@id}
-      class={[
-        "mx-auto w-full min-w-0 px-5 sm:px-8",
-        @width == :wide && "max-w-[90rem]",
-        @width == :focused && "max-w-3xl",
-        @width == :compact && "max-w-xl",
-        @width == :form && "max-w-md",
-        @class
-      ]}
+      class={
+        [
+          "mx-auto w-full min-w-0 px-5 sm:px-8",
+          # Consistent clearance from sticky nav + bottom breathing room.
+          "pt-8 pb-10 sm:pt-10 sm:pb-12",
+          @width == :wide && "max-w-[90rem]",
+          @width == :focused && "max-w-3xl",
+          @width == :compact && "max-w-xl",
+          @width == :form && "max-w-md",
+          @class
+        ]
+      }
       {@rest}
     >
       {render_slot(@inner_block)}
@@ -90,7 +94,7 @@ defmodule TarakanWeb.Layouts do
       <header class="sticky top-0 z-40 border-b-2 border-strong bg-ground">
         <div
           aria-hidden="true"
-          class="absolute inset-x-0 -bottom-0.5 h-0.5 bg-gradient-to-r from-phosphor via-phosphor/25 to-transparent"
+          class="absolute inset-x-0 -bottom-0.5 h-0.5 bg-gradient-to-r from-signal via-signal/40 to-transparent"
         >
         </div>
         <div class="flex h-14 w-full items-stretch justify-between">
@@ -100,8 +104,8 @@ defmodule TarakanWeb.Layouts do
               aria-label="Tarakan home"
               class="flex items-center gap-2.5 border-r-2 border-strong px-4 sm:px-8"
             >
-              <.logo_mark class="size-5 text-ink" />
-              <span class="hidden font-display text-base font-bold uppercase tracking-[0.08em] text-ink sm:inline">
+              <.logo_mark class="size-5 text-signal" />
+              <span class="hidden font-display text-base font-bold uppercase tracking-[0.14em] text-ink sm:inline">
                 Tarakan
               </span>
             </.link>

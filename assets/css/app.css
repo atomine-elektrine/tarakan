@@ -58,30 +58,30 @@
 
 /* Tarakan color tokens.
 
-   Dark is the flagship: a night-shift terminal - blue-black ground, steel
-   frames, hot-magenta signal for findings, cyan phosphor for anything live.
-   Light is the same room with the lights on: cool grey-blue paper, navy ink,
-   the accents darkened to hold contrast, and every glow switched off. */
+   Dark (flagship): pure void black, hard white type, signal red for findings
+   and primary actions, amber for secondary callouts. Borders stay cold grey so
+   red only hits where it means something (findings, CTAs, live pulse).
+   Light: clinical paper, black ink, the same pure red under control. */
 :root {
-  --ground: #f6f7f9;
-  --panel: #eceef2;
-  --ink: #141c28;
-  --ink-muted: #47556a;
-  --ink-faint: #75818f;
-  --rule: #d6dae2;
-  --strong: #1b2534;
-  --signal: #b0135b;
-  --quote: #0d7a58;
-  --btn: #1b2534;
-  --btn-fg: #e8edf4;
+  --ground: #f4f4f4;
+  --panel: #ebebeb;
+  --ink: #0a0a0a;
+  --ink-muted: #444444;
+  --ink-faint: #777777;
+  --rule: #cccccc;
+  --strong: #111111;
+  --signal: #c40018;
+  --quote: #9a6b00;
+  --btn: #c40018;
+  --btn-fg: #ffffff;
   /* The well is the surface live values sit on. Light keeps it visually flush
      with the ground - a dark slab reads as a defect on paper - but it must be
      an opaque paint, not transparent: wire-badge hollows fill with --well and
      would otherwise expose the badge's own stroke color. Dark gets the true
      phosphor treatment: recessed slab, scanlines, glow. */
-  --well: #f6f7f9;
+  --well: #f4f4f4;
   --well-pad: 0;
-  --phosphor: #086e86;
+  --phosphor: #c40018;
   --glow: none;
   --glow-soft: none;
   --scan: none;
@@ -91,69 +91,69 @@
    (data-theme). Keep the two dark blocks identical. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #070b12;
-    --panel: #0d1420;
-    --ink: #d7e1ef;
-    --ink-muted: #8493aa;
-    --ink-faint: #5a6980;
-    --rule: #182236;
-    --strong: #2b3b56;
-    --signal: #ff3d8f;
-    --quote: #43e6a8;
-    --btn: #3ed6f2;
-    --btn-fg: #04131c;
-    --well: #0a1119;
+    --ground: #000000;
+    --panel: #0a0a0a;
+    --ink: #f2f2f2;
+    --ink-muted: #9a9a9a;
+    --ink-faint: #5c5c5c;
+    --rule: #1a1a1a;
+    --strong: #2e2e2e;
+    --signal: #e60012;
+    --quote: #ffcc00;
+    --btn: #e60012;
+    --btn-fg: #ffffff;
+    --well: #050505;
     --well-pad: 0.75rem;
-    --phosphor: #45e0ff;
-    --glow: 0 0 14px color-mix(in srgb, var(--phosphor) 50%, transparent);
-    --glow-soft: 0 0 10px color-mix(in srgb, var(--phosphor) 35%, transparent);
+    --phosphor: #ff1a2e;
+    --glow: 0 0 12px color-mix(in srgb, var(--signal) 55%, transparent);
+    --glow-soft: 0 0 8px color-mix(in srgb, var(--signal) 40%, transparent);
     --scan: repeating-linear-gradient(
       0deg,
-      rgb(255 255 255 / 0.035) 0 1px,
+      rgb(255 255 255 / 0.03) 0 1px,
       transparent 1px 3px
     );
   }
 }
 
 :root[data-theme="dark"] {
-  --ground: #070b12;
-  --panel: #0d1420;
-  --ink: #d7e1ef;
-  --ink-muted: #8493aa;
-  --ink-faint: #5a6980;
-  --rule: #182236;
-  --strong: #2b3b56;
-  --signal: #ff3d8f;
-  --quote: #43e6a8;
-  --btn: #3ed6f2;
-  --btn-fg: #04131c;
-  --well: #0a1119;
+  --ground: #000000;
+  --panel: #0a0a0a;
+  --ink: #f2f2f2;
+  --ink-muted: #9a9a9a;
+  --ink-faint: #5c5c5c;
+  --rule: #1a1a1a;
+  --strong: #2e2e2e;
+  --signal: #e60012;
+  --quote: #ffcc00;
+  --btn: #e60012;
+  --btn-fg: #ffffff;
+  --well: #050505;
   --well-pad: 0.75rem;
-  --phosphor: #45e0ff;
-  --glow: 0 0 14px color-mix(in srgb, var(--phosphor) 50%, transparent);
-  --glow-soft: 0 0 10px color-mix(in srgb, var(--phosphor) 35%, transparent);
+  --phosphor: #ff1a2e;
+  --glow: 0 0 12px color-mix(in srgb, var(--signal) 55%, transparent);
+  --glow-soft: 0 0 8px color-mix(in srgb, var(--signal) 40%, transparent);
   --scan: repeating-linear-gradient(
     0deg,
-    rgb(255 255 255 / 0.035) 0 1px,
+    rgb(255 255 255 / 0.03) 0 1px,
     transparent 1px 3px
   );
 }
 
 :root[data-theme="light"] {
-  --ground: #f6f7f9;
-  --panel: #eceef2;
-  --ink: #141c28;
-  --ink-muted: #47556a;
-  --ink-faint: #75818f;
-  --rule: #d6dae2;
-  --strong: #1b2534;
-  --signal: #b0135b;
-  --quote: #0d7a58;
-  --btn: #1b2534;
-  --btn-fg: #e8edf4;
-  --well: #f6f7f9;
+  --ground: #f4f4f4;
+  --panel: #ebebeb;
+  --ink: #0a0a0a;
+  --ink-muted: #444444;
+  --ink-faint: #777777;
+  --rule: #cccccc;
+  --strong: #111111;
+  --signal: #c40018;
+  --quote: #9a6b00;
+  --btn: #c40018;
+  --btn-fg: #ffffff;
+  --well: #f4f4f4;
   --well-pad: 0;
-  --phosphor: #086e86;
+  --phosphor: #c40018;
   --glow: none;
   --glow-soft: none;
   --scan: none;

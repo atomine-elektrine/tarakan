@@ -47,6 +47,11 @@ defmodule Tarakan.GitHub do
     github_client().fetch_branch_head(owner, name, branch)
   end
 
+  @doc "Lists branch names for a public repository (bounded first page)."
+  def list_branches(owner, name) do
+    github_client().list_branches(owner, name)
+  end
+
   @doc "Fetches a Git tree by its immutable object SHA."
   def fetch_tree(owner, name, tree_sha, recursive \\ false) when is_boolean(recursive) do
     github_client().fetch_tree(owner, name, tree_sha, recursive)

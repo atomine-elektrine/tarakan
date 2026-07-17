@@ -27,6 +27,92 @@ defmodule Tarakan.WorkTest do
     assert Work.get_visible_task(task.id).id == task.id
   end
 
+  test "blank job fields are filled with mass-path defaults", %{
+    creator: creator,
+    repository: repository
+  } do
+    sha = Tarakan.ScansFixtures.random_commit_sha()
+
+    assert {:ok, task} =
+             Work.create_task(repository, creator, %{
+               "commit_sha" => sha
+             })
+
+    assert task.kind == "code_review"
+    assert task.capability == "agent"
+    assert task.title =~ "Security report"
+    assert task.title =~ repository.owner
+    assert task.description =~ "Independent security review"
+    assert task.status == "proposed"
+  end
+
+  test "duplicate active jobs for the same commit and kind are rejected", %{
+    creator: creator,
+    repository: repository
+  } do
+    sha = Tarakan.ScansFixtures.random_commit_sha()
+
+    assert {:ok, first} =
+             Work.create_task(repository, creator, %{
+               "commit_sha" => sha,
+               "kind" => "code_review"
+             })
+
+    assert first.status == "proposed"
+
+    assert {:error, :duplicate_job} =
+             Work.create_task(repository, creator, %{
+               "commit_sha" => sha,
+               "kind" => "code_review",
+               "title" => "Spam click number two"
+             })
+
+    # A different kind on the same commit is still allowed.
+    assert {:ok, other_kind} =
+             Work.create_task(repository, creator, %{
+               "commit_sha" => sha,
+               "kind" => "threat_model"
+             })
+
+    assert other_kind.kind == "threat_model"
+  end
+
+  test "publishing a report with findings opens an agent check job", %{
+    creator: creator,
+    repository: repository
+  } do
+    scan =
+      scan_fixture(repository, creator, %{
+        "findings_json" => findings_json_fixture()
+      })
+
+    # submit_scan already opens the auto check job.
+    jobs = Work.list_tasks(repository)
+
+    assert Enum.any?(jobs, fn task ->
+             task.kind == "verify_findings" and task.capability == "agent" and
+               task.status == "open" and task.target_review_id == scan.id
+           end)
+
+    # Second call is a no-op (duplicate active check job).
+    assert {:ok, :skipped_duplicate} = Work.maybe_open_agent_verification_job(scan)
+  end
+
+  test "stewards auto-open jobs they create", %{repository: repository} do
+    steward = moderator_account_fixture()
+    sha = Tarakan.ScansFixtures.random_commit_sha()
+
+    assert {:ok, task} =
+             Work.create_task(repository, steward, %{
+               "commit_sha" => sha,
+               "title" => "Steward-opened security report"
+             })
+
+    assert task.status == "open"
+    assert task.published_at
+    assert [%{action: "publish"} | _] = task.decisions
+  end
+
   test "probation accounts can propose at most three tasks per day", %{
     creator: creator,
     repository: repository

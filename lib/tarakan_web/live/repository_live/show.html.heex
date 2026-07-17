@@ -1,33 +1,53 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
-  <Layouts.page class={["py-4 sm:py-5"]}>
+  <Layouts.page>
     <.repository_header repository={@repository} active_tab={:security} />
 
-    <section class="mt-6 flex flex-wrap items-baseline gap-x-6 gap-y-1 border-b border-rule pb-4 font-mono text-xs text-ink-muted">
-      <span>
-        <span id="scan-count" class="tabular-nums text-ink">{@repository.scan_count}</span>
-        reports
-      </span>
-      <span>
-        <span id="open-findings-count" class="tabular-nums text-ink">{@repository.open_findings_count}</span>
-        open findings
-      </span>
-      <span>
-        <span
-          id="verified-findings-count"
-          class="tabular-nums text-ink"
-        >{@repository.verified_findings_count}</span>
-        verified
-      </span>
+    <%!-- At a glance --%>
+    <section
+      id="security-summary"
+      class="mt-6 grid gap-3 border-2 border-strong sm:grid-cols-3"
+    >
+      <div class="border-b-2 border-strong px-4 py-4 sm:border-b-0 sm:border-r-2">
+        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+          Open findings
+        </p>
+        <p id="open-findings-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
+          {@repository.open_findings_count}
+        </p>
+        <p class="mt-1 text-xs text-ink-muted">Unique issues still open</p>
+      </div>
+      <div class="border-b-2 border-strong px-4 py-4 sm:border-b-0 sm:border-r-2">
+        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Verified</p>
+        <p id="verified-findings-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
+          {@repository.verified_findings_count}
+        </p>
+        <p class="mt-1 text-xs text-ink-muted">Independently confirmed</p>
+      </div>
+      <div class="px-4 py-4">
+        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Reports</p>
+        <p id="scan-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
+          {@repository.scan_count}
+        </p>
+        <p class="mt-1 text-xs text-ink-muted">Submitted review runs</p>
+      </div>
     </section>
 
-    <section :if={@canonical_findings != []} id="canonical-findings" class="mt-6">
+    <p class="mt-4 max-w-2xl text-sm leading-6 text-ink-muted">
+      <span class="font-semibold text-ink">Findings</span>
+      are the issues. <span class="font-semibold text-ink">Jobs</span>
+      are open work for humans or agents. <span class="font-semibold text-ink">Reports</span>
+      are the raw submissions behind everything.
+    </p>
+
+    <%!-- Findings first: what matters --%>
+    <section id="canonical-findings" class="mt-10">
       <div class="flex flex-wrap items-end justify-between gap-3 border-b-2 border-strong pb-3">
         <div>
           <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
-            Canonical findings
+            Findings
           </h2>
-          <p class="mt-1 text-xs text-ink-faint">
-            Repeated detections are assimilated here; raw reports remain below.
+          <p class="mt-1 max-w-xl text-xs leading-5 text-ink-faint">
+            Merged view of the same issue seen across runs. Tap a title for detail.
           </p>
         </div>
         <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
@@ -35,168 +55,417 @@
         </span>
       </div>
 
-      <div class="divide-y divide-rule border-b border-rule">
+      <div
+        :if={@canonical_findings == []}
+        id="findings-empty"
+        class="border-b border-rule px-1 py-10 text-center"
+      >
+        <p class="text-sm font-medium text-ink">No findings yet</p>
+        <p class="mt-1 text-xs leading-5 text-ink-muted">
+          Next: open a job below, or run
+          <code class="font-mono text-ink">tarakan --agent codex --pickup</code>
+          from a clone.
+        </p>
+      </div>
+
+      <div :if={@canonical_findings != []} class="divide-y divide-rule border-b border-rule">
         <article
           :for={finding <- @canonical_findings}
           id={"canonical-#{finding.public_id}"}
-          class="py-4"
+          class="py-5"
         >
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-start gap-3">
             <.vote_control
               subject_type="canonical_finding"
               subject_id={finding.id}
               summary={finding.vote_summary}
               can_vote={@can_vote}
-              class="mr-1 shrink-0"
+              class="mt-0.5 shrink-0"
             />
-            <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-signal">
-              {finding.severity}
-            </span>
-            <.notch_badge class={[
-              finding.status == "verified" && "bg-ink text-ground",
-              finding.status == "fixed" && "bg-quote text-ground",
-              finding.status in ["open", "disputed"] && "text-ink-muted"
-            ]}>
-              {finding.status}
-            </.notch_badge>
-            <span class="font-mono text-[10px] text-ink-faint">
-              detected in {finding.detections_count} {if finding.detections_count == 1,
-                do: "run",
-                else: "runs"} · {finding.distinct_submitters_count} {if finding.distinct_submitters_count ==
-                                                                          1,
-                                                                        do: "submitter",
-                                                                        else: "submitters"} · {finding.distinct_models_count} {if finding.distinct_models_count ==
-                                                                                                                                    1,
-                                                                                                                                  do:
-                                                                                                                                    "model",
-                                                                                                                                  else:
-                                                                                                                                    "models"}
-            </span>
-          </div>
-          <h3 class="mt-1 text-sm font-semibold text-ink">
-            <.link
-              navigate={~p"/findings/#{finding.occurrence_public_id}"}
-              class="transition hover:text-signal"
-            >
-              {finding.title}
-            </.link>
-          </h3>
-          <p class="mt-1 font-mono text-[11px] text-ink-faint">
-            {finding.file_path}{finding_lines(finding)} · last seen {short_sha(
-              finding.last_seen_commit_sha
-            )}
-          </p>
-          <p class="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">
-            {TarakanWeb.FindingPresentation.description_excerpt(finding.description)}
-          </p>
-          <p class="mt-2 font-mono text-[10px] text-ink-faint">
-            {finding.confirmations_count} confirmed · {finding.disputes_count} disputed
-          </p>
+            <div class="min-w-0 flex-1">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-signal">
+                  {finding.severity}
+                </span>
+                <.notch_badge class={[
+                  finding.status == "verified" && "bg-ink text-ground",
+                  finding.status == "fixed" && "bg-quote text-ground",
+                  finding.status in ["open", "disputed"] && "text-ink-muted"
+                ]}>
+                  {finding.status}
+                </.notch_badge>
+                <.notch_badge class="text-ink-faint">Reported</.notch_badge>
+                <.notch_badge
+                  :if={finding.trust && finding.trust.agent_reproduced}
+                  class="text-ink-muted"
+                >
+                  Agent reproduced
+                </.notch_badge>
+                <.notch_badge
+                  :if={finding.trust && finding.trust.human_checked}
+                  class="text-ink-muted"
+                >
+                  Human checked
+                </.notch_badge>
+              </div>
 
-          <details :if={finding.can_check} class="mt-2">
-            <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint transition hover:text-ink">
-              Check this finding
-            </summary>
-            <form
-              id={"canonical-#{finding.public_id}-check-form"}
-              phx-submit="record_finding_verdict"
-              class="mt-2 flex flex-wrap items-center gap-2"
-            >
-              <input type="hidden" name="finding_id" value={finding.public_id} />
-              <input type="hidden" name="commit_sha" value={finding.last_seen_commit_sha} />
-              <input
-                type="text"
-                name="notes"
-                required
-                minlength="20"
-                maxlength="2000"
-                placeholder="Independent evidence or counter-evidence"
-                autocomplete="off"
-                class="min-w-0 flex-1 basis-64 border border-rule bg-transparent px-3 py-1.5 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-phosphor"
-              />
-              <button
-                name="verdict"
-                value="confirmed"
-                class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
-              >
-                Confirm
-              </button>
-              <button
-                name="verdict"
-                value="disputed"
-                class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-signal hover:text-signal"
-              >
-                Dispute
-              </button>
-              <button
-                name="verdict"
-                value="fixed"
-                class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
-              >
-                Fixed
-              </button>
-            </form>
-          </details>
+              <h3 class="mt-1.5 text-base font-semibold leading-snug text-ink">
+                <.link
+                  navigate={~p"/findings/#{finding.occurrence_public_id}"}
+                  class="transition hover:text-signal"
+                >
+                  {finding.title}
+                </.link>
+              </h3>
+
+              <p class="mt-1 font-mono text-[11px] text-ink-faint">
+                <span class="text-ink-muted">{finding.file_path}{finding_lines(finding)}</span>
+                <span class="mx-1.5" aria-hidden="true">·</span>
+                last at {short_sha(finding.last_seen_commit_sha)}
+              </p>
+
+              <p class="mt-2 max-w-3xl text-sm leading-6 text-ink-muted">
+                {TarakanWeb.FindingPresentation.description_excerpt(finding.description, 220)}
+              </p>
+
+              <p class="mt-2 font-mono text-[10px] text-ink-faint">
+                detected in {finding.detections_count} {if finding.detections_count == 1,
+                  do: "run",
+                  else: "runs"} · {finding.distinct_submitters_count} {if finding.distinct_submitters_count ==
+                                                                            1,
+                                                                          do: "submitter",
+                                                                          else: "submitters"} · {finding.confirmations_count} confirmed · {finding.disputes_count} disputed
+              </p>
+
+              <details :if={finding.can_check} class="mt-3">
+                <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.14em] text-signal transition hover:underline">
+                  Check this finding
+                </summary>
+                <form
+                  id={"canonical-#{finding.public_id}-check-form"}
+                  phx-submit="record_finding_verdict"
+                  class="mt-2 flex flex-wrap items-center gap-2"
+                >
+                  <input type="hidden" name="finding_id" value={finding.public_id} />
+                  <input type="hidden" name="commit_sha" value={finding.last_seen_commit_sha} />
+                  <input
+                    type="text"
+                    name="notes"
+                    required
+                    minlength="20"
+                    maxlength="2000"
+                    placeholder="Independent evidence or counter-evidence"
+                    autocomplete="off"
+                    class="min-w-0 flex-1 basis-64 border border-rule bg-transparent px-3 py-1.5 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-phosphor"
+                  />
+                  <button
+                    name="verdict"
+                    value="confirmed"
+                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    name="verdict"
+                    value="disputed"
+                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-signal hover:text-signal"
+                  >
+                    Dispute
+                  </button>
+                  <button
+                    name="verdict"
+                    value="fixed"
+                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
+                  >
+                    Fixed
+                  </button>
+                </form>
+              </details>
+            </div>
+          </div>
         </article>
       </div>
     </section>
 
-    <section id="security-record" class="mt-6">
-      <div class="pb-3">
+    <%!-- Jobs: action --%>
+    <section id="review-work" class="mt-10">
+      <div class="flex flex-wrap items-end justify-between gap-3 border-b-2 border-strong pb-3">
+        <div>
+          <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
+            Jobs
+          </h2>
+          <p class="mt-1 max-w-xl text-xs leading-5 text-ink-faint">
+            Open work for humans or agents. Claim one, review the commit, publish a report.
+          </p>
+        </div>
+        <.link
+          navigate={~p"/jobs"}
+          class="font-mono text-[10px] uppercase tracking-[0.14em] text-signal hover:underline"
+        >
+          All open jobs →
+        </.link>
+      </div>
+
+      <div class="mt-4 border-2 border-strong bg-panel px-4 py-4">
+        <%= if @current_scope && @current_scope.account do %>
+          <div class="flex flex-wrap items-center gap-3">
+            <button
+              id="quick-open-job-button"
+              type="button"
+              phx-click="quick_open_job"
+              class="clip-notch bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-click-loading:opacity-60"
+            >
+              {if @can_auto_open_job,
+                do: "Open security report job",
+                else: "Propose security report job"}
+            </button>
+            <button
+              id="propose-task-toggle"
+              type="button"
+              phx-click="toggle_task_form"
+              class="font-mono text-xs text-signal transition hover:underline"
+            >
+              {if @show_task_form, do: "Cancel", else: "Customize…"}
+            </button>
+          </div>
+          <p class="mt-2 max-w-xl text-xs leading-5 text-ink-muted">
+            One click → default branch tip, AI helper, auto title.
+            <%= if @can_auto_open_job do %>
+              You can open jobs straight onto the queue.
+            <% else %>
+              A steward still publishes proposals before they go live.
+            <% end %>
+          </p>
+
+          <.form
+            :if={@show_task_form}
+            for={@task_form}
+            id="review-task-form"
+            phx-change="validate_task"
+            phx-submit="create_task"
+            class="mt-5 border-t border-rule pt-5"
+          >
+            <div class="grid gap-4 md:grid-cols-2">
+              <div>
+                <label
+                  for="task-branch-select"
+                  class="mb-1.5 block text-sm font-semibold text-ink"
+                >
+                  Branch
+                </label>
+                <select
+                  id="task-branch-select"
+                  name="branch"
+                  phx-change="select_branch"
+                  class="w-full border-2 border-strong bg-ground px-3 py-2 font-mono text-sm text-ink focus:border-signal focus:outline-none"
+                >
+                  <option
+                    :for={branch <- @branch_options}
+                    value={branch}
+                    selected={branch == @selected_branch}
+                  >
+                    {branch}{if branch == @repository.default_branch, do: " (default)", else: ""}
+                  </option>
+                  <option :if={@branch_options == []} value="" selected>
+                    {if @repository.default_branch,
+                      do: @repository.default_branch,
+                      else: "No branches listed"}
+                  </option>
+                </select>
+                <p class="mt-1.5 text-xs leading-5 text-ink-faint">
+                  Sets the commit SHA to that branch tip.
+                </p>
+              </div>
+              <div>
+                <.input
+                  field={@task_form[:commit_sha]}
+                  type="text"
+                  label="Commit SHA"
+                  autocomplete="off"
+                />
+                <button
+                  id="use-default-commit-button"
+                  type="button"
+                  phx-click="use_default_commit"
+                  class="mt-1.5 font-mono text-[11px] text-signal transition hover:underline"
+                >
+                  Refresh tip of {@selected_branch || @repository.default_branch || "branch"}
+                </button>
+              </div>
+              <.input
+                field={@task_form[:kind]}
+                type="select"
+                label="Job type"
+                options={@task_kind_options}
+              />
+              <div :if={@task_form[:kind].value == "verify_findings"}>
+                <.input
+                  field={@task_form[:target_review_id]}
+                  type="select"
+                  label="Report to check"
+                  options={[{"Choose a report", ""} | @task_target_options]}
+                />
+                <p
+                  :if={@task_target_options == []}
+                  class="mt-1.5 text-xs leading-5 text-ink-faint"
+                >
+                  No reports with findings to check yet.
+                </p>
+              </div>
+              <.input
+                field={@task_form[:capability]}
+                type="select"
+                label="Who should do it"
+                options={@capability_options}
+              />
+              <.input
+                field={@task_form[:title]}
+                type="text"
+                label="Title (optional)"
+                autocomplete="off"
+              />
+            </div>
+            <div class="mt-4">
+              <.input
+                field={@task_form[:description]}
+                type="textarea"
+                label="What to do (optional)"
+                placeholder="Leave blank for an auto brief, or add focus."
+              />
+            </div>
+            <button
+              id="create-review-task-button"
+              type="submit"
+              class="clip-notch mt-4 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-submit-loading:opacity-60"
+            >
+              {if @can_auto_open_job, do: "Open job", else: "Propose job"}
+            </button>
+          </.form>
+        <% else %>
+          <div id="review-task-auth-gate">
+            <p class="text-sm text-ink-muted">Sign in to open or claim jobs on this repo.</p>
+            <.link
+              navigate={~p"/accounts/log-in"}
+              class="mt-2 inline-block font-mono text-xs text-signal hover:underline"
+            >
+              Sign in →
+            </.link>
+          </div>
+        <% end %>
+      </div>
+
+      <div
+        id="review-tasks"
+        phx-update="stream"
+        class="mt-4 divide-y divide-rule border-t border-rule"
+      >
+        <div
+          id="review-tasks-empty"
+          class="hidden py-8 text-center text-sm text-ink-faint only:block"
+        >
+          No jobs yet. Open one above or run <code class="font-mono text-ink">tarakan worker --agent codex</code>.
+        </div>
+        <article
+          :for={{id, task} <- @streams.tasks}
+          id={id}
+          class="grid gap-3 px-1 py-4 transition-colors hover:bg-panel sm:grid-cols-[1fr_auto] sm:items-center sm:px-2"
+        >
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+              <span class="text-ink-muted">{review_kind_label(task.kind)}</span>
+              <span aria-hidden="true">·</span>
+              <span>{provenance_label(task.capability)} required</span>
+              <span aria-hidden="true">·</span>
+              <span title={task.commit_sha}>{short_sha(task.commit_sha)}</span>
+              <span aria-hidden="true">·</span>
+              <span class="text-ink">{short_task_status(task)}</span>
+            </div>
+            <h3 class="mt-1.5 text-sm font-semibold text-ink">{task.title}</h3>
+            <p class="mt-1 line-clamp-2 text-xs leading-5 text-ink-muted">{task.description}</p>
+          </div>
+          <div class="flex shrink-0 flex-wrap items-center gap-2">
+            <.link
+              id={"review-task-#{task.id}-link"}
+              navigate={~p"/work/#{task.id}"}
+              class="border-2 border-strong px-3 py-1.5 text-center font-display text-[11px] uppercase tracking-[0.16em] text-ink transition hover:border-signal hover:text-signal"
+            >
+              Open
+            </.link>
+            <button
+              :if={can_cancel_job?(task, @current_scope)}
+              id={"review-task-#{task.id}-cancel"}
+              type="button"
+              phx-click="cancel_task"
+              phx-value-id={task.id}
+              data-confirm="Cancel this job? It will leave the open queue."
+              class="border-2 border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition hover:border-signal hover:text-signal"
+            >
+              Cancel
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <%!-- Raw reports last: provenance --%>
+    <section id="security-record" class="mt-10">
+      <div class="border-b-2 border-strong pb-3">
         <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
-          Raw reports
+          Reports
         </h2>
-        <p class="mt-1 text-xs text-ink-faint">
-          Immutable submission provenance; voting and verification live on canonical findings above.
+        <p class="mt-1 max-w-xl text-xs leading-5 text-ink-faint">
+          Each run as submitted. Issues above are merged from these.
         </p>
       </div>
 
-      <div id="scans" phx-update="stream" class="border-t-2 border-strong">
+      <div id="scans" phx-update="stream" class="border-b border-rule">
         <div
           id="scans-empty"
-          class="hidden px-1 py-8 text-center text-sm text-ink-faint only:block"
+          class="hidden px-1 py-10 text-center text-sm text-ink-faint only:block"
         >
           No reports yet.
         </div>
 
         <article :for={{id, scan} <- @streams.scans} id={id} class="border-b border-rule py-5">
-          <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <.handle_link
-              handle={scan.submitted_by.handle}
-              class="text-sm font-semibold text-ink"
-            />
-            <span
-              id={"scan-#{scan.id}-provenance-attestation"}
-              class="font-mono text-[11px] text-ink-muted"
-              title="Submitter claim, not independently verified"
-            >
-              {TarakanWeb.FindingPresentation.how_made_label(scan.provenance)}
-            </span>
-            <span class="font-mono text-[11px] text-ink-faint" title={scan.review_status}>
-              {review_kind_label(scan.review_kind)} · {TarakanWeb.FindingPresentation.status_blurb(
-                scan.review_status
-              )}
-            </span>
-            <span
-              class="font-mono text-[11px] tabular-nums text-ink-faint"
-              title={scan.commit_sha}
-            >
-              {short_sha(scan.commit_sha)} · {scan_time(scan.inserted_at)}
-            </span>
-            <span class="ml-auto flex flex-wrap gap-2">
-              <.notch_badge :if={scan.findings_count > 0} class="text-signal">
-                {scan.findings_count}
-                {if scan.findings_count == 1, do: "finding", else: "findings"}
-              </.notch_badge>
-              <.notch_badge :if={scan.findings_count == 0} class="text-ink-muted">
-                {empty_review_label(scan)}
-              </.notch_badge>
-            </span>
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                <.handle_link
+                  handle={scan.submitted_by.handle}
+                  class="text-sm font-semibold text-ink"
+                />
+                <span
+                  id={"scan-#{scan.id}-provenance-attestation"}
+                  class="font-mono text-[11px] text-ink-muted"
+                  title="Submitter claim, not independently verified"
+                >
+                  {TarakanWeb.FindingPresentation.how_made_label(scan.provenance)}
+                </span>
+              </div>
+              <p class="mt-1 font-mono text-[11px] text-ink-faint">
+                {review_kind_label(scan.review_kind)}
+                <span class="mx-1" aria-hidden="true">·</span>
+                <span title={scan.review_status}>
+                  {TarakanWeb.FindingPresentation.status_blurb(scan.review_status)}
+                </span>
+                <span class="mx-1" aria-hidden="true">·</span>
+                <span title={scan.commit_sha}>{short_sha(scan.commit_sha)}</span>
+                <span class="mx-1" aria-hidden="true">·</span>
+                {scan_time(scan.inserted_at)}
+              </p>
+            </div>
+            <.notch_badge :if={scan.findings_count > 0} class="shrink-0 text-signal">
+              {scan.findings_count}
+              {if scan.findings_count == 1, do: "finding", else: "findings"}
+            </.notch_badge>
+            <.notch_badge :if={scan.findings_count == 0} class="shrink-0 text-ink-muted">
+              {empty_review_label(scan)}
+            </.notch_badge>
           </div>
 
           <div
             :if={scan.details_visible && (scan.model || scan.prompt_version)}
-            class="mt-1 font-mono text-[11px] text-ink-faint"
+            class="mt-2 font-mono text-[11px] text-ink-faint"
           >
             <span :if={scan.model}>via {scan.model}</span>
             <span :if={scan.model && scan.prompt_version}> · </span>
@@ -218,24 +487,15 @@
           </div>
 
           <details
-            :if={scan.details_visible && scan.raw_document}
-            class="mt-2"
+            :if={scan.details_visible && scan.findings_count > 0}
+            class="mt-3"
+            open={scan.findings_count <= 3}
           >
             <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint transition hover:text-ink">
-              Raw submitted JSON
+              Findings in this report ({scan.findings_count})
             </summary>
-            <pre
-              id={"scan-#{scan.id}-raw-report"}
-              class="mt-2 max-h-48 overflow-auto border border-rule bg-panel px-3 py-2 font-mono text-[11px] leading-5 text-ink-muted"
-            >{raw_report(scan)}</pre>
-          </details>
-
-          <ul
-            :if={scan.details_visible && scan.findings_count > 0}
-            class="mt-4 space-y-4"
-          >
-            <li :for={finding <- scan.findings} class="flex gap-3">
-              <div class="min-w-0">
+            <ul class="mt-3 space-y-3 border-l-2 border-rule pl-4">
+              <li :for={finding <- scan.findings}>
                 <div class="flex flex-wrap items-center gap-2">
                   <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-signal">
                     {finding.severity}
@@ -257,7 +517,7 @@
                     {finding.file_path}{finding_lines(finding)}
                   </.link>
                 </div>
-                <h4 class="mt-1 text-sm font-semibold text-ink">
+                <h4 class="mt-0.5 text-sm font-semibold text-ink">
                   <.link
                     id={"finding-page-#{finding.id}"}
                     navigate={~p"/findings/#{finding.public_id}"}
@@ -267,11 +527,24 @@
                   </.link>
                 </h4>
                 <p class="mt-1 max-w-3xl text-sm leading-6 text-ink-muted">
-                  {TarakanWeb.FindingPresentation.description_excerpt(finding.description)}
+                  {TarakanWeb.FindingPresentation.description_excerpt(finding.description, 180)}
                 </p>
-              </div>
-            </li>
-          </ul>
+              </li>
+            </ul>
+          </details>
+
+          <details
+            :if={scan.details_visible && scan.raw_document}
+            class="mt-2"
+          >
+            <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint transition hover:text-ink">
+              Raw JSON
+            </summary>
+            <pre
+              id={"scan-#{scan.id}-raw-report"}
+              class="mt-2 max-h-48 overflow-auto border border-rule bg-panel px-3 py-2 font-mono text-[11px] leading-5 text-ink-muted"
+            >{raw_report(scan)}</pre>
+          </details>
 
           <p
             :if={!scan.details_visible}
@@ -355,151 +628,6 @@
           </.form>
         </article>
       </div>
-    </section>
-
-    <section id="review-work" class="mt-10 border-t-2 border-strong pt-6">
-      <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
-        Jobs
-      </h2>
-
-      <div
-        id="review-tasks"
-        phx-update="stream"
-        class="mt-4 divide-y divide-rule border-t border-rule"
-      >
-        <div
-          id="review-tasks-empty"
-          class="hidden py-6 text-sm text-ink-faint only:block"
-        >
-          No open jobs.
-        </div>
-        <article
-          :for={{id, task} <- @streams.tasks}
-          id={id}
-          class="grid gap-4 px-3 py-4 transition-colors hover:bg-panel sm:grid-cols-[1fr_auto] sm:items-center"
-        >
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-              <span>{review_kind_label(task.kind)}</span>
-              <span>·</span>
-              <span>{provenance_label(task.capability)} required</span>
-              <span>·</span>
-              <span title={task.commit_sha}>{short_sha(task.commit_sha)}</span>
-            </div>
-            <h3 class="mt-1.5 text-sm font-semibold text-ink">{task.title}</h3>
-            <p class="mt-1 line-clamp-2 text-xs leading-5 text-ink-muted">{task.description}</p>
-          </div>
-          <div class="flex items-center justify-between gap-3 sm:justify-end">
-            <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-              {short_task_status(task)}
-            </span>
-            <.link
-              id={"review-task-#{task.id}-link"}
-              navigate={~p"/work/#{task.id}"}
-              class="border-2 border-strong px-3 py-1.5 font-display text-[11px] uppercase tracking-[0.16em] text-ink transition hover:border-signal hover:text-signal"
-            >
-              View task
-            </.link>
-          </div>
-        </article>
-      </div>
-
-      <%= if @current_scope && @current_scope.account do %>
-        <div class="border-t border-rule pt-4">
-          <button
-            id="propose-task-toggle"
-            type="button"
-            phx-click="toggle_task_form"
-            class="font-mono text-xs text-signal transition hover:underline"
-          >
-            {if @show_task_form, do: "Cancel", else: "Propose a job"}
-          </button>
-
-          <.form
-            :if={@show_task_form}
-            for={@task_form}
-            id="review-task-form"
-            phx-change="validate_task"
-            phx-submit="create_task"
-            class="mt-5"
-          >
-            <div class="grid gap-4 md:grid-cols-2">
-              <div>
-                <.input
-                  field={@task_form[:commit_sha]}
-                  type="text"
-                  label="Full commit SHA"
-                  autocomplete="off"
-                />
-                <button
-                  id="use-default-commit-button"
-                  type="button"
-                  phx-click="use_default_commit"
-                  class="mt-1.5 font-mono text-[11px] text-signal transition hover:underline"
-                >
-                  Use the current {@repository.default_branch || "default"} commit
-                </button>
-              </div>
-              <.input
-                field={@task_form[:title]}
-                type="text"
-                label="Job title"
-                autocomplete="off"
-              />
-              <.input
-                field={@task_form[:kind]}
-                type="select"
-                label="Job type"
-                options={@task_kind_options}
-              />
-              <div :if={@task_form[:kind].value == "verify_findings"}>
-                <.input
-                  field={@task_form[:target_review_id]}
-                  type="select"
-                  label="Report to check"
-                  options={[{"Choose a report", ""} | @task_target_options]}
-                />
-                <p
-                  :if={@task_target_options == []}
-                  class="mt-1.5 text-xs leading-5 text-ink-faint"
-                >
-                  This repository has no visible reports with findings to check yet.
-                </p>
-              </div>
-              <.input
-                field={@task_form[:capability]}
-                type="select"
-                label="Who should do it"
-                options={@capability_options}
-              />
-            </div>
-            <div class="mt-4">
-              <.input
-                field={@task_form[:description]}
-                type="textarea"
-                label="What to do"
-                placeholder="For a Report: what to examine. For a Check: which report and what to verify."
-              />
-            </div>
-            <button
-              id="create-review-task-button"
-              type="submit"
-              class="clip-notch mt-4 bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-submit-loading:opacity-60"
-            >
-              Propose job
-            </button>
-          </.form>
-        </div>
-      <% else %>
-        <div id="review-task-auth-gate" class="border-t border-rule pt-4">
-          <.link
-            navigate={~p"/accounts/log-in"}
-            class="font-mono text-xs text-signal hover:underline"
-          >
-            Sign in to propose or claim jobs
-          </.link>
-        </div>
-      <% end %>
     </section>
   </Layouts.page>
 </Layouts.app>

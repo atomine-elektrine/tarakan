@@ -47,6 +47,15 @@ defmodule Tarakan.GitHubClient do
                }}
               | {:error, error_reason()}
 
+  @doc """
+  Lists branch names for a public repository (first page, bounded).
+
+  Returns `{:ok, names}` ordered as returned by the host. Does not include
+  remote-tracking or tag refs.
+  """
+  @callback list_branches(String.t(), String.t()) ::
+              {:ok, [String.t()]} | {:error, error_reason()}
+
   @callback fetch_tree(String.t(), String.t(), String.t(), boolean()) ::
               {:ok,
                %{

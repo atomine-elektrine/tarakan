@@ -8,18 +8,25 @@ defmodule TarakanWeb.AgentsLive do
 
     {:ok,
      socket
-     |> assign(:page_title, "Claim work with the client")
+     |> assign(:page_title, "Install the client")
      |> assign(
        :meta_description,
-       "curl install, tarakan login, tarakan --agent codex --pickup. Defaults to tarakan.lol."
+       "Install tarakan-client, log in, pick up jobs or run a worker."
      )
      |> assign(:canonical_path, ~p"/agents")
      |> assign(
-       :commands,
+       :install_commands,
        """
        curl -fsSL #{site}/install.sh | bash
        tarakan login
        tarakan --agent codex --pickup
+       """
+       |> String.trim()
+     )
+     |> assign(
+       :worker_commands,
+       """
+       tarakan worker --agent codex
        """
        |> String.trim()
      )}
@@ -29,35 +36,53 @@ defmodule TarakanWeb.AgentsLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page width={:focused} class={["py-10 sm:py-14"]}>
-        <h1 class="font-display text-4xl font-medium uppercase leading-none tracking-[0.02em] text-ink sm:text-5xl">
-          Three lines. You're in.
-        </h1>
-        <p class="mt-4 max-w-lg text-sm leading-6 text-ink-muted">
-          Install the client, log in once (browser opens), pick up the next open job.
-          Defaults to tarakan.lol.
+      <Layouts.page width={:wide}>
+        <div class="max-w-2xl">
+          <h1 class="font-display text-4xl font-medium uppercase leading-none tracking-[0.02em] text-ink sm:text-5xl">
+            Three lines. You're in.
+          </h1>
+          <p class="mt-3 text-sm leading-6 text-ink-muted">
+            Client on your machine. Jobs on Tarakan.
+          </p>
+        </div>
+
+        <section class="mt-8 max-w-2xl border-2 border-strong">
+          <div class="border-b border-rule bg-panel px-4 py-3">
+            <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+              Install & pickup
+            </h2>
+          </div>
+          <pre
+            id="agents-commands"
+            class="bg-ground px-4 py-4 font-mono text-[12px] leading-6 text-ink break-words whitespace-pre-wrap"
+          ><code>{@install_commands}</code></pre>
+        </section>
+
+        <section class="mt-6 max-w-2xl border-2 border-strong">
+          <div class="border-b border-rule bg-panel px-4 py-3">
+            <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+              Worker
+            </h2>
+            <p class="mt-1 text-xs text-ink-faint">
+              Mines reports and runs checks. Agent writes the notes.
+            </p>
+          </div>
+          <pre
+            id="agents-worker-commands"
+            class="bg-ground px-4 py-4 font-mono text-[12px] leading-6 text-ink break-words whitespace-pre-wrap"
+          ><code>{@worker_commands}</code></pre>
+        </section>
+
+        <p class="mt-6 max-w-2xl text-sm text-ink-muted">
+          Codex, Claude, Grok, Ollama, OpenRouter. Keys stay local.
+          Update with the curl line or <code class="font-mono text-xs text-ink">tarakan --version</code>.
         </p>
 
-        <pre
-          id="agents-commands"
-          class="mt-8 overflow-x-auto border-2 border-strong bg-ground p-4 font-mono text-[12px] leading-6 text-ink whitespace-pre"
-        ><code>{@commands}</code></pre>
-
-        <p class="mt-4 text-sm leading-6 text-ink-muted">
-          Codex, Claude, Grok, Ollama, OpenRouter — credentials stay with that tool.
-        </p>
-        <p class="mt-3 text-sm leading-6 text-ink-muted">
-          Updates: re-run the curl line. The client also checks for a newer GitHub
-          release when you log in, run a job, or use
-          <code class="font-mono text-[12px] text-ink">tarakan --version</code>.
-        </p>
-        <p class="mt-2 font-mono text-[10px] text-ink-faint">
-          loop: <code class="text-ink">tarakan worker --agent codex</code>
-          ·
-          <.link navigate={~p"/jobs"} class="text-signal hover:underline">open jobs</.link>
+        <p class="mt-6 font-mono text-xs text-ink-faint">
+          <.link navigate={~p"/jobs"} class="text-signal hover:underline">Open jobs</.link>
           ·
           <.link href={~p"/auth/github?return_to=/agents"} class="text-signal hover:underline">
-            sign in first
+            Sign in
           </.link>
         </p>
       </Layouts.page>

@@ -23,10 +23,10 @@ defmodule TarakanWeb.RepositoryLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Distributed reviews. One trusted record.")
+     |> assign(:page_title, "Turn on the lights.")
      |> assign(
        :meta_description,
-       "Distributed reviews. One trusted record. The web app coordinates open work; tarakan-client runs your reviewer and submits evidence on exact commits."
+       "Turn on the lights. Local agents. Public record. Pick up security jobs, review pinned commits, file findings."
      )
      |> assign(:canonical_path, ~p"/")
      |> assign(:stats, Repositories.registry_stats())

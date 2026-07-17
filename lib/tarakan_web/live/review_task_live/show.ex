@@ -21,7 +21,7 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
      |> assign(:meta_description, task_meta_description(task))
      |> assign(:canonical_path, ~p"/requests/#{task.id}")
      |> assign_task(task)
-     |> assign(:decision_form, decision_form())
+     |> assign(:decision_form, decision_form(task))
      |> assign(:disclosure_form, disclosure_form())}
   end
 
@@ -232,6 +232,7 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
     |> assign(:visible_target_review, visible_target_review(socket.assigns.current_scope, task))
     |> assign(:provenance_options, provenance_options(task))
     |> assign(:verification_form, verification_form(task))
+    |> assign(:decision_form, decision_form(task))
     |> assign(
       :contribution_form,
       to_form(
@@ -243,7 +244,13 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
     )
   end
 
-  defp decision_form, do: to_form(%{"reason" => "", "evidence" => ""}, as: :decision)
+  defp decision_form(%ReviewTask{status: "proposed"} = task) do
+    to_form(%{"reason" => Work.default_publish_reason(task), "evidence" => ""}, as: :decision)
+  end
+
+  defp decision_form(_task) do
+    to_form(%{"reason" => "", "evidence" => ""}, as: :decision)
+  end
 
   defp disclosure_form do
     to_form(

@@ -563,8 +563,10 @@ defmodule Tarakan.Scans do
       |> Repo.transaction()
       |> case do
         {:ok, %{scan: scan}} ->
+          scan = preload_record(scan)
           broadcast_review_submitted(scan)
-          {:ok, preload_record(scan)}
+          _ = Tarakan.Work.maybe_open_agent_verification_job(scan)
+          {:ok, scan}
 
         {:error, :scan, changeset, _changes} ->
           {:error, changeset}

@@ -7,7 +7,7 @@ defmodule TarakanWeb.AccountLive.Confirmation do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page width={:form} class={["py-16 sm:py-24"]}>
+      <Layouts.page width={:form}>
         <div class="text-center">
           <.header>Welcome {@account.email}</.header>
         </div>

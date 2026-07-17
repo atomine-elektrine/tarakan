@@ -135,12 +135,66 @@ defmodule Tarakan.Git.Local do
     end
   end
 
+  @doc """
+  Resolves a local branch name to a full commit SHA.
+
+  Branch names are constrained to a safe subset so they can be passed to
+  `rev-parse` without shell ambiguity.
+  """
+  def branch_head(dir, branch) when is_binary(branch) do
+    case validate_branch_name(branch) do
+      {:ok, branch} ->
+        case read(dir, ["rev-parse", "--verify", "refs/heads/#{branch}^{commit}"]) do
+          {:ok, sha_output} ->
+            case validate_sha(String.trim(sha_output)) do
+              {:ok, sha} -> {:ok, sha}
+              _invalid -> :miss
+            end
+
+          {:error, _reason} ->
+            :miss
+        end
+
+      :error ->
+        :miss
+    end
+  end
+
+  def branch_head(_dir, _branch), do: :miss
+
   def validate_sha(sha) when is_binary(sha) do
     sha = String.downcase(sha)
     if Regex.match?(@full_sha, sha), do: {:ok, sha}, else: {:error, :invalid_reference}
   end
 
   def validate_sha(_sha), do: {:error, :invalid_reference}
+
+  # Git branch names: disallow control chars, leading/trailing dots/slashes,
+  # and sequences git rejects. Keep this strict for rev-parse safety.
+  defp validate_branch_name(branch) do
+    branch = String.trim(branch)
+
+    cond do
+      branch == "" ->
+        :error
+
+      byte_size(branch) > 250 ->
+        :error
+
+      String.contains?(branch, ["..", "@{", "\\", " ", "\t", "\n", "~", "^", ":", "?", "*", "["]) ->
+        :error
+
+      String.starts_with?(branch, "/") or String.ends_with?(branch, "/") or
+          String.ends_with?(branch, ".lock") ->
+        :error
+
+      not String.valid?(branch) ->
+        :error
+
+      true ->
+        {:ok, branch}
+    end
+  end
 
   defp read(dir, args) do
     if File.dir?(dir) do

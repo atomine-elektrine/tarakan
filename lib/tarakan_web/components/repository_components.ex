@@ -38,8 +38,12 @@ defmodule TarakanWeb.RepositoryComponents do
       </.breadcrumbs>
 
       <div class="flex flex-wrap items-center gap-3">
-        <.notch_badge id="repository-status" class={status_badge_class(@repository.status)}>
-          {@repository.status}
+        <.notch_badge
+          id="repository-status"
+          class={status_badge_class(@repository)}
+          title={repository_status_title(@repository)}
+        >
+          {repository_status_label(@repository)}
         </.notch_badge>
         <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
           public record
@@ -128,10 +132,13 @@ defmodule TarakanWeb.RepositoryComponents do
           label="Security"
         >
           <span
-            :if={@repository.open_findings_count > 0}
-            class="rounded-full bg-signal px-1.5 py-0.5 font-mono text-[9px] leading-none text-ground"
+            :if={security_tab_count(@repository)}
+            class={[
+              "rounded-full px-1.5 py-0.5 font-mono text-[9px] leading-none",
+              security_tab_count_class(@repository)
+            ]}
           >
-            {@repository.open_findings_count}
+            {security_tab_count(@repository)}
           </span>
         </.repository_tab>
       </nav>
@@ -197,7 +204,85 @@ defmodule TarakanWeb.RepositoryComponents do
   def review_kind_label("write_fix"), do: "Write a fix"
   def review_kind_label(other), do: other
 
-  defp status_badge_class("findings"), do: "text-signal"
-  defp status_badge_class("unscanned"), do: "text-ink-faint"
-  defp status_badge_class(_status), do: "text-ink-muted"
+  @doc """
+  Short status for repo headers and meta.
+
+  Avoids the useless lone label \"findings\" once every repo has some.
+  Prefers open/verified counts and clear/unreviewed states.
+  """
+  def repository_status_label(%{status: "unscanned"}), do: "Not reviewed"
+
+  def repository_status_label(%{open_findings_count: open, verified_findings_count: verified})
+      when is_integer(open) and open > 0 do
+    open_label = if open == 1, do: "1 open", else: "#{open} open"
+
+    if is_integer(verified) and verified > 0 do
+      verified_label = if verified == 1, do: "1 verified", else: "#{verified} verified"
+      "#{open_label} · #{verified_label}"
+    else
+      open_label
+    end
+  end
+
+  def repository_status_label(%{status: status}) when status in ["reviewed", "clear"],
+    do: "Clear"
+
+  def repository_status_label(%{scan_count: n}) when is_integer(n) and n > 0, do: "Clear"
+  def repository_status_label(_repository), do: "Not reviewed"
+
+  defp repository_status_title(%{open_findings_count: open, verified_findings_count: verified})
+       when is_integer(open) and open > 0 do
+    open_part =
+      if open == 1,
+        do: "1 unique finding still open",
+        else: "#{open} unique findings still open"
+
+    if is_integer(verified) and verified > 0 do
+      verified_part =
+        if verified == 1,
+          do: "1 independently verified",
+          else: "#{verified} independently verified"
+
+      "#{open_part}; #{verified_part}"
+    else
+      open_part
+    end
+  end
+
+  defp repository_status_title(%{status: "unscanned"}),
+    do: "No public review on the record yet"
+
+  defp repository_status_title(%{status: status}) when status in ["reviewed", "clear"],
+    do: "Reviewed with no open findings"
+
+  defp repository_status_title(%{scan_count: n}) when is_integer(n) and n > 0,
+    do: "Reviewed with no open findings"
+
+  defp repository_status_title(_repository), do: "No public review on the record yet"
+
+  defp status_badge_class(%{open_findings_count: open}) when is_integer(open) and open > 0,
+    do: "text-signal"
+
+  defp status_badge_class(%{status: "unscanned"}), do: "text-ink-faint"
+
+  defp status_badge_class(%{status: status}) when status in ["reviewed", "clear"],
+    do: "text-quote"
+
+  defp status_badge_class(_repository), do: "text-ink-muted"
+
+  # Tab pill: open count when > 0, else verified count, else nothing for unscanned.
+  defp security_tab_count(%{open_findings_count: open}) when is_integer(open) and open > 0,
+    do: open
+
+  defp security_tab_count(%{verified_findings_count: verified})
+       when is_integer(verified) and verified > 0,
+       do: verified
+
+  defp security_tab_count(%{scan_count: scans}) when is_integer(scans) and scans > 0, do: "ok"
+  defp security_tab_count(_repository), do: nil
+
+  defp security_tab_count_class(%{open_findings_count: open}) when is_integer(open) and open > 0,
+    do: "bg-signal text-ground"
+
+  defp security_tab_count_class(_repository), do: "bg-panel text-ink-muted border border-rule"
 end

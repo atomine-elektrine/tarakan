@@ -92,6 +92,8 @@ defmodule Tarakan.FindingMemory do
 
     rows
     |> Enum.map(fn {canonical, occurrence, commit_sha} ->
+      last_sha = canonical.last_seen_commit_sha || commit_sha
+
       %{
         id: canonical.id,
         public_id: canonical.public_id,
@@ -104,12 +106,13 @@ defmodule Tarakan.FindingMemory do
         title: occurrence.title,
         description: occurrence.description,
         first_seen_commit_sha: canonical.first_seen_commit_sha,
-        last_seen_commit_sha: canonical.last_seen_commit_sha || commit_sha,
+        last_seen_commit_sha: last_sha,
         detections_count: canonical.detections_count,
         distinct_submitters_count: canonical.distinct_submitters_count,
         distinct_models_count: canonical.distinct_models_count,
         confirmations_count: canonical.confirmations_count,
-        disputes_count: canonical.disputes_count
+        disputes_count: canonical.disputes_count,
+        trust: trust_summary(canonical, last_sha)
       }
     end)
     |> Enum.sort_by(&{status_rank(&1.status), -&1.detections_count, &1.file_path})
@@ -592,6 +595,50 @@ defmodule Tarakan.FindingMemory do
       end
 
     Repo.update!(changeset)
+  end
+
+  @doc """
+  Trust chips for UI: reported always; agent_reproduced / human_checked from checks.
+
+  Agent checks never alone equal quorum; human_checked means a qualified
+  human/hybrid confirmation exists at this commit.
+  """
+  def trust_summary(%CanonicalFinding{} = canonical, commit_sha)
+      when is_binary(commit_sha) and commit_sha != "" do
+    checks = list_checks(canonical.id, commit_sha)
+
+    agent_reproduced =
+      Enum.any?(checks, fn c -> c.verdict == "confirmed" and c.provenance == "agent" end)
+
+    human_checked =
+      Enum.any?(checks, fn c ->
+        c.verdict in ["confirmed", "fixed"] and c.counts_toward_quorum
+      end)
+
+    agent_disputed =
+      Enum.any?(checks, fn c -> c.verdict == "disputed" and c.provenance == "agent" end)
+
+    %{
+      reported: true,
+      agent_reproduced: agent_reproduced,
+      agent_disputed: agent_disputed,
+      human_checked: human_checked,
+      verified: canonical.status == "verified",
+      disputed: canonical.status == "disputed",
+      fixed: canonical.status == "fixed"
+    }
+  end
+
+  def trust_summary(_canonical, _commit_sha) do
+    %{
+      reported: true,
+      agent_reproduced: false,
+      agent_disputed: false,
+      human_checked: false,
+      verified: false,
+      disputed: false,
+      fixed: false
+    }
   end
 
   defp occurrence_for_check(canonical_id, commit_sha) do

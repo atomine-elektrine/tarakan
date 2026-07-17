@@ -1,5 +1,5 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
-  <Layouts.page class={["py-4 sm:py-5"]}>
+  <Layouts.page>
     <.repository_header repository={@repository} active_tab={:code} />
 
     <section
@@ -7,10 +7,29 @@
       class="mt-5 flex flex-col gap-3 rounded-md border border-rule bg-panel px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
     >
       <div class="flex min-w-0 flex-wrap items-center gap-2">
-        <span class="inline-flex items-center gap-2 rounded-md border border-rule bg-ground px-3 py-1.5 font-mono text-[11px] text-ink">
-          <.icon name="hero-code-bracket" class="size-3.5 text-ink-faint" />
-          {@repository.default_branch || "default"}
-        </span>
+        <%= if @live_action == :finding or @branch_options == [] do %>
+          <span class="inline-flex items-center gap-2 rounded-md border border-rule bg-ground px-3 py-1.5 font-mono text-[11px] text-ink">
+            <.icon name="hero-code-bracket" class="size-3.5 text-ink-faint" />
+            {@selected_branch || @repository.default_branch || "commit"}
+          </span>
+        <% else %>
+          <form id="code-branch-form" phx-change="select_branch" class="min-w-0">
+            <label for="code-branch-select" class="sr-only">Branch</label>
+            <select
+              id="code-branch-select"
+              name="branch"
+              class="max-w-[14rem] truncate rounded-md border border-rule bg-ground px-2.5 py-1.5 font-mono text-[11px] text-ink focus:border-signal focus:outline-none"
+            >
+              <option
+                :for={branch <- @branch_options}
+                value={branch}
+                selected={branch == @selected_branch}
+              >
+                {branch}{if branch == @repository.default_branch, do: " (default)", else: ""}
+              </option>
+            </select>
+          </form>
+        <% end %>
         <span class="text-ink-faint" aria-hidden="true">·</span>
         <span
           id="code-commit-sha"
@@ -32,7 +51,8 @@
             do: "finding",
             else: "findings"}
         </.link>
-        <span>{if @clone_urls, do: "Hosted on Tarakan", else: "Read-only"}</span>
+        <%!-- Hosted status lives in the repository header only. --%>
+        <span :if={is_nil(@clone_urls)}>Read-only</span>
       </div>
     </section>
 

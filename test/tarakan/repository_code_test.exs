@@ -236,6 +236,17 @@ defmodule Tarakan.RepositoryCodeTest do
     assert :miss = Cache.get({:github_head, repository.github_id, "main"})
   end
 
+  test "lists branches with the default branch first", %{repository: repository} do
+    assert {:ok, branches} = RepositoryCode.list_branches(repository)
+    assert hd(branches) == "main"
+    assert "develop" in branches
+  end
+
+  test "resolves a non-default branch tip to a commit SHA", %{repository: repository} do
+    assert {:ok, sha} = RepositoryCode.resolve_branch_commit(repository, "develop")
+    assert sha == String.duplicate("8", 40)
+  end
+
   test "adopts the new canonical identity after a rename on the host" do
     repository =
       Repo.insert!(%Tarakan.Repositories.Repository{

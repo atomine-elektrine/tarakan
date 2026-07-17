@@ -58,7 +58,7 @@ defmodule TarakanWeb.FindingPresentation do
 
   @doc "Short status label with meaning."
   def status_blurb("quarantined"),
-    do: "Submitted (not accepted)"
+    do: "Awaiting independent check"
 
   def status_blurb("accepted"), do: "Accepted"
   def status_blurb("rejected"), do: "Rejected"

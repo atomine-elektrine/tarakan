@@ -29,6 +29,8 @@ defmodule Tarakan.Work do
   @claim_mutation_limit 30
   @claim_mutation_window_seconds 60
   @finding_kinds ~w(code_review threat_model privacy_review business_logic)
+  # Queue slots that still block a duplicate of the same work item.
+  @active_job_statuses ~w(proposed open claimed submitted changes_requested)
 
   def subscribe(repository_id) do
     Phoenix.PubSub.subscribe(Tarakan.PubSub, topic(repository_id))
@@ -207,6 +209,46 @@ defmodule Tarakan.Work do
     Contribution.changeset(contribution, attrs)
   end
 
+  @doc """
+  Fills blank job fields with mass-path defaults so proposers need only
+  confirm (or tweak) rather than invent title, description, kind, and
+  capability every time.
+
+  Defaults:
+  - kind → `code_review`
+  - capability → `agent`
+  - title / description → kind-aware stubs
+  - commit_sha → target report's pin when `verify_findings` + target set
+  """
+  def fill_task_defaults(%Repository{} = repository, attrs) when is_map(attrs) do
+    attrs = stringify_keys(attrs)
+    kind = present_or(attrs["kind"], "code_review")
+    capability = present_or(attrs["capability"], "agent")
+
+    attrs =
+      attrs
+      |> Map.put("kind", kind)
+      |> Map.put("capability", capability)
+      |> maybe_pin_commit_from_target_review(kind)
+
+    title = present_or(attrs["title"], default_task_title(repository, kind, attrs))
+    description = present_or(attrs["description"], default_task_description(kind, attrs))
+
+    attrs
+    |> Map.put("title", title)
+    |> Map.put("description", description)
+  end
+
+  @doc "Default steward publish reason (≥10 chars) for auto-open and form prefill."
+  def default_publish_reason(%ReviewTask{} = task) do
+    short = String.slice(task.commit_sha || "", 0, 7)
+    kind = task.kind || "code_review"
+
+    "Opening #{kind_label(kind)} job at #{short} for the public queue."
+  end
+
+  def default_publish_reason(_), do: "Opening this job for the public contributor queue."
+
   def create_task(%Repository{} = repository, %Account{} = creator, attrs) do
     create_task(repository, Scope.for_account(creator), attrs)
   end
@@ -217,6 +259,7 @@ defmodule Tarakan.Work do
         attrs
       ) do
     repository = Repo.get!(Repository, repository.id)
+    attrs = fill_task_defaults(repository, attrs)
 
     changeset =
       %ReviewTask{}
@@ -244,6 +287,8 @@ defmodule Tarakan.Work do
           fresh_scope = lock_scope_account(scope)
           authorize_locked!(fresh_scope, :propose_task, locked_repository)
           enforce_proposal_quota!(fresh_scope)
+          # Under the repository row lock so concurrent one-clicks cannot race.
+          enforce_no_duplicate_active_job!(changeset, locked_repository.id)
 
           case Repo.insert(changeset) do
             {:ok, task} ->
@@ -258,7 +303,7 @@ defmodule Tarakan.Work do
       case result do
         {:ok, task} ->
           broadcast(repository.id, {:review_task_created, task.id})
-          {:ok, task}
+          maybe_auto_publish_task(task, scope)
 
         {:error, reason} ->
           {:error, reason}
@@ -267,6 +312,126 @@ defmodule Tarakan.Work do
   end
 
   def create_task(%Repository{}, _actor, _attrs), do: {:error, :unauthorized}
+
+  @doc """
+  After a report with findings is published, open one agent check job so
+  workers can re-dig the same commit independently.
+
+  Skips empty reports and when an active check job already targets the report.
+  Failures are logged and do not fail the original submission.
+  """
+  def maybe_open_agent_verification_job(%Scan{} = scan) do
+    scan = Repo.preload(scan, [:repository, :submitted_by])
+
+    cond do
+      (scan.findings_count || 0) < 1 ->
+        {:ok, :skipped_empty}
+
+      is_nil(scan.submitted_by_id) or is_nil(scan.repository_id) ->
+        {:ok, :skipped_incomplete}
+
+      active_verification_job?(scan.id) ->
+        {:ok, :skipped_duplicate}
+
+      true ->
+        open_agent_verification_job(scan)
+    end
+  rescue
+    error ->
+      require Logger
+      Logger.warning("auto verify job failed for scan #{scan.id}: #{Exception.message(error)}")
+      {:error, error}
+  end
+
+  def maybe_open_agent_verification_job(_), do: {:ok, :skipped}
+
+  defp active_verification_job?(scan_id) when is_integer(scan_id) do
+    Repo.exists?(
+      from task in ReviewTask,
+        where:
+          task.target_review_id == ^scan_id and task.kind == "verify_findings" and
+            task.status in ^@active_job_statuses
+    )
+  end
+
+  defp open_agent_verification_job(%Scan{} = scan) do
+    repository = scan.repository || Repo.get!(Repository, scan.repository_id)
+    short = String.slice(scan.commit_sha || "", 0, 7)
+
+    attrs =
+      fill_task_defaults(repository, %{
+        "commit_sha" => scan.commit_sha,
+        "kind" => "verify_findings",
+        "capability" => "agent",
+        "target_review_id" => scan.id,
+        "title" => "Check report ##{scan.id} · #{repository.owner}/#{repository.name} @ #{short}",
+        "description" =>
+          "Independently re-check every finding in report ##{scan.id} at the pinned commit. " <>
+            "Reproduce or dispute with evidence. Do not invent new findings."
+      })
+
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    changeset =
+      %ReviewTask{}
+      |> ReviewTask.creation_changeset(attrs)
+      |> Ecto.Changeset.put_change(:repository_id, repository.id)
+      |> Ecto.Changeset.put_change(:created_by_id, scan.submitted_by_id)
+      |> Ecto.Changeset.put_change(:status, "open")
+      |> Ecto.Changeset.put_change(:visibility, "public")
+      |> Ecto.Changeset.put_change(:published_at, now)
+      |> Ecto.Changeset.put_change(:disclosed_at, now)
+      |> Ecto.Changeset.put_change(:commit_committed_at, scan.commit_committed_at)
+
+    case Repo.insert(changeset) do
+      {:ok, task} ->
+        broadcast(repository.id, {:review_task_created, task.id})
+        broadcast(repository.id, {:review_task_published, task.id})
+        {:ok, preload_task(task)}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
+  end
+
+  defp enforce_no_duplicate_active_job!(changeset, repository_id) do
+    kind = Ecto.Changeset.get_field(changeset, :kind)
+    commit_sha = Ecto.Changeset.get_field(changeset, :commit_sha)
+    target_review_id = Ecto.Changeset.get_field(changeset, :target_review_id)
+
+    query =
+      from(task in ReviewTask,
+        where:
+          task.repository_id == ^repository_id and task.commit_sha == ^commit_sha and
+            task.kind == ^kind and task.status in ^@active_job_statuses
+      )
+
+    query =
+      if kind == "verify_findings" do
+        from(task in query, where: task.target_review_id == ^target_review_id)
+      else
+        query
+      end
+
+    if Repo.exists?(query) do
+      Repo.rollback(:duplicate_job)
+    else
+      :ok
+    end
+  end
+
+  # Stewards/moderators who can publish skip the second approval trip: the job
+  # opens immediately with an attributable default publish decision.
+  defp maybe_auto_publish_task(%ReviewTask{} = task, %Scope{} = scope) do
+    if Policy.allowed?(scope, :publish_task, task) do
+      case publish_task(task, scope, %{"reason" => default_publish_reason(task)}) do
+        {:ok, open} -> {:ok, open}
+        {:error, _reason} -> {:ok, task}
+      end
+    else
+      {:ok, task}
+    end
+  end
 
   def publish_task(%ReviewTask{} = task, %Account{} = account, attrs) do
     publish_task(task, Scope.for_account(account), attrs)
@@ -761,6 +926,7 @@ defmodule Tarakan.Work do
         {:ok, {task, review}} ->
           broadcast(task.repository_id, {:review_task_submitted, task.id})
           Scans.broadcast_review_submitted(review)
+          _ = maybe_open_agent_verification_job(review)
           {:ok, task}
 
         {:error, reason} ->
@@ -1274,11 +1440,19 @@ defmodule Tarakan.Work do
   end
 
   defp proposal_preflight(%Scope{account_id: account_id}, %Repository{id: repository_id}) do
+    # Burst limits. Exact duplicate jobs are rejected separately under row lock.
     with :ok <- rate_check({:task_proposal, account_id}, 10, 60, :proposal_rate_limited),
          :ok <-
            rate_check(
              {:task_proposal_repository, account_id, repository_id},
              6,
+             60,
+             :proposal_rate_limited
+           ),
+         :ok <-
+           rate_check(
+             {:task_proposal_repository_any, repository_id},
+             20,
              60,
              :proposal_rate_limited
            ) do
@@ -1545,4 +1719,112 @@ defmodule Tarakan.Work do
   defp broadcast(repository_id, message) do
     Phoenix.PubSub.broadcast(Tarakan.PubSub, topic(repository_id), message)
   end
+
+  defp present_or(value, default) do
+    if blank_string?(value), do: default, else: value
+  end
+
+  defp blank_string?(value) when value in [nil, ""], do: true
+  defp blank_string?(value) when is_binary(value), do: String.trim(value) == ""
+  defp blank_string?(_), do: false
+
+  defp maybe_pin_commit_from_target_review(attrs, "verify_findings") do
+    case parse_positive_int(attrs["target_review_id"]) do
+      nil ->
+        attrs
+
+      target_id ->
+        case Repo.get(Scan, target_id) do
+          %Scan{commit_sha: sha} when is_binary(sha) and sha != "" ->
+            if blank_string?(attrs["commit_sha"]),
+              do: Map.put(attrs, "commit_sha", sha),
+              else: attrs
+
+          _missing ->
+            attrs
+        end
+    end
+  end
+
+  defp maybe_pin_commit_from_target_review(attrs, _kind), do: attrs
+
+  defp parse_positive_int(value) when is_integer(value) and value > 0, do: value
+
+  defp parse_positive_int(value) when is_binary(value) do
+    case Integer.parse(String.trim(value)) do
+      {int, ""} when int > 0 -> int
+      _ -> nil
+    end
+  end
+
+  defp parse_positive_int(_), do: nil
+
+  defp default_task_title(%Repository{} = repository, kind, attrs) do
+    slug = "#{repository.owner}/#{repository.name}"
+    short = short_commit_label(attrs["commit_sha"])
+
+    case kind do
+      "verify_findings" ->
+        report =
+          case parse_positive_int(attrs["target_review_id"]) do
+            nil -> "report"
+            id -> "report ##{id}"
+          end
+
+        "Check #{report} · #{slug}" <> if(short != "", do: " @ #{short}", else: "")
+
+      "write_fix" ->
+        "Propose a fix · #{slug}" <> if(short != "", do: " @ #{short}", else: "")
+
+      other ->
+        "#{kind_label(other)} · #{slug}" <> if(short != "", do: " @ #{short}", else: "")
+    end
+    |> String.slice(0, 160)
+  end
+
+  defp default_task_description(kind, attrs) do
+    case kind do
+      "code_review" ->
+        "Independent security review of this commit. Report concrete defects with file paths, severity, and remediation."
+
+      "threat_model" ->
+        "Map assets, trust boundaries, and abuse paths at this commit. Report code-backed weaknesses where assumptions fail."
+
+      "privacy_review" ->
+        "Trace personal and sensitive data through collection, storage, logging, and sharing. Report concrete privacy failures."
+
+      "business_logic" ->
+        "Test workflow invariants for authorization gaps, replay, races, and quota bypasses. Report exploitable sequences."
+
+      "verify_findings" ->
+        report =
+          case parse_positive_int(attrs["target_review_id"]) do
+            nil -> "the linked report"
+            id -> "report ##{id}"
+          end
+
+        "Independently confirm or dispute each finding in #{report} against the pinned commit. Record verdicts with evidence."
+
+      "write_fix" ->
+        "Propose a minimal, testable patch for the defect described here. Prefer the smallest safe change."
+
+      _other ->
+        "Complete this security job against the pinned commit with clear evidence."
+    end
+  end
+
+  defp short_commit_label(sha) when is_binary(sha) and byte_size(sha) >= 7 do
+    String.slice(String.downcase(String.trim(sha)), 0, 7)
+  end
+
+  defp short_commit_label(_), do: ""
+
+  defp kind_label("code_review"), do: "Security report"
+  defp kind_label("threat_model"), do: "Threat model"
+  defp kind_label("privacy_review"), do: "Privacy review"
+  defp kind_label("business_logic"), do: "Business logic"
+  defp kind_label("verify_findings"), do: "Check report"
+  defp kind_label("write_fix"), do: "Write fix"
+  defp kind_label(other) when is_binary(other), do: other
+  defp kind_label(_), do: "Security job"
 end

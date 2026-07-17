@@ -7,7 +7,7 @@ defmodule TarakanWeb.AccountLive.Login do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page width={:form} class={["space-y-5 py-8 sm:py-12"]}>
+      <Layouts.page width={:form} class={["space-y-5"]}>
         <div class="text-center">
           <.header>
             <p>Log in</p>

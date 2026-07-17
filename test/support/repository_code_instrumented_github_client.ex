@@ -95,6 +95,12 @@ defmodule Tarakan.RepositoryCode.InstrumentedGitHubClient do
   end
 
   @impl true
+  def list_branches(owner, name) do
+    record_call(:branches)
+    GitHubStub.list_branches(owner, name)
+  end
+
+  @impl true
   def fetch_tree(owner, name, tree_sha, recursive) do
     record_call(:tree)
     GitHubStub.fetch_tree(owner, name, tree_sha, recursive)

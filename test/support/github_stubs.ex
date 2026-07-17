@@ -210,11 +210,26 @@ defmodule Tarakan.GitHubStub do
      }}
   end
 
+  def fetch_branch_head("openai", "codex", "develop") do
+    {:ok,
+     %{
+       sha: String.duplicate("8", 40),
+       tree_sha: @root_tree_sha,
+       committed_at: ~U[2026-07-02 12:00:00Z]
+     }}
+  end
+
   def fetch_branch_head("acme", "widget", branch),
     do: fetch_branch_head("openai", "codex", branch)
 
   def fetch_branch_head("rate", "limited", _branch), do: {:error, :rate_limited}
   def fetch_branch_head(_owner, _name, _branch), do: {:error, :not_found}
+
+  @impl true
+  def list_branches("openai", "codex"), do: {:ok, ["main", "develop", "feature/auth"]}
+  def list_branches("acme", "widget"), do: list_branches("openai", "codex")
+  def list_branches("rate", "limited"), do: {:error, :rate_limited}
+  def list_branches(_owner, _name), do: {:error, :not_found}
 
   @impl true
   def fetch_tree("openai", "codex", @root_tree_sha, recursive) do

@@ -1,5 +1,5 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
-  <Layouts.page class={["py-6 sm:py-8"]}>
+  <Layouts.page>
     <.breadcrumbs id="explore-breadcrumb">
       <:crumb navigate={~p"/"}>registry</:crumb>
       <:crumb>explore</:crumb>
@@ -105,9 +105,7 @@
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
-              >
-                {entry.host}/{entry.owner}/{entry.name}
-              </.link>
+              >{entry.host}/{entry.owner}/{entry.name}</.link>
             </span>
             <span :if={entry.kind == :scan} class="min-w-0 truncate text-ink-muted">
               <.handle_link handle={entry.handle} class="font-semibold" />
@@ -115,9 +113,7 @@
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
-              >
-                {entry.owner}/{entry.name}
-              </.link>
+              >{entry.owner}/{entry.name}</.link>
               <span class="text-ink-faint">
                 {String.downcase(provenance_label(entry.provenance))} · {String.slice(
                   entry.commit_sha,
@@ -132,9 +128,7 @@
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
-              >
-                {entry.owner}/{entry.name}
-              </.link>
+              >{entry.owner}/{entry.name}</.link>
             </span>
             <span :if={entry.kind == :comment} class="min-w-0 truncate text-ink-muted">
               <.handle_link handle={entry.handle} class="font-semibold" />
@@ -142,9 +136,7 @@
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
-              >
-                {entry.finding_title || "a finding"}
-              </.link>
+              >{entry.finding_title || "a finding"}</.link>
               <span class="text-ink-faint">in {entry.owner}/{entry.name}</span>
             </span>
             <span class="ml-auto shrink-0">
