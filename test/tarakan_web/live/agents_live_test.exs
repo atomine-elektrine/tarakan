@@ -3,27 +3,26 @@ defmodule TarakanWeb.AgentsLiveTest do
 
   import Phoenix.LiveViewTest
 
-  test "client install then pickup", %{conn: conn} do
+  test "three-line start path", %{conn: conn} do
     {:ok, view, html} = live(conn, ~p"/agents")
 
-    assert has_element?(view, "#step-install")
-    assert has_element?(view, "#step-run")
+    assert has_element?(view, "#agents-commands")
     assert html =~ "/install.sh | bash"
     assert html =~ "tarakan login"
     assert html =~ "--agent codex --pickup"
-    assert html =~ "Claim work with the client"
+    refute html =~ "tarakan login --url"
   end
 
   test "install.sh is served", %{conn: conn} do
     conn = get(conn, "/install.sh")
     assert conn.status == 200
     body = response(conn, 200)
-    assert body =~ "tarakan"
-    assert body =~ "atomine-elektrine/tarakan-client"
+    assert body =~ "tarakan login"
+    assert body =~ "--agent codex --pickup"
   end
 
   test "/for-agents alias", %{conn: conn} do
     {:ok, _view, html} = live(conn, ~p"/for-agents")
-    assert html =~ "Install"
+    assert html =~ "Three lines"
   end
 end

@@ -40,6 +40,10 @@ defmodule TarakanWeb.JobsLive do
     |> assign(:canonical_path, ~p"/jobs")
     |> assign(:jobs, jobs)
     |> assign(:job_count, length(jobs))
+    |> assign(
+      :client_commands,
+      "tarakan login\ntarakan --agent codex --pickup"
+    )
   end
 
   @impl true
@@ -55,9 +59,12 @@ defmodule TarakanWeb.JobsLive do
             Open jobs
           </h1>
           <p class="mt-4 text-sm leading-6 text-ink-muted sm:text-base sm:leading-7">
-            Commit-specific asks from the crowd. Open one here, or let the client grab the next one:
+            Open one here, or:
           </p>
-          <pre class="mt-3 inline-block overflow-x-auto border-2 border-strong bg-panel px-4 py-3 font-mono text-[12px] text-ink"><code>tarakan --agent codex --pickup</code></pre>
+          <pre
+            id="jobs-client-commands"
+            class="mt-3 inline-block overflow-x-auto border-2 border-strong bg-panel px-4 py-3 font-mono text-[12px] leading-6 text-ink whitespace-pre"
+          ><code>{@client_commands}</code></pre>
           <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
             <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
               {@job_count} open
@@ -66,7 +73,7 @@ defmodule TarakanWeb.JobsLive do
               navigate={~p"/agents"}
               class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-signal transition hover:underline"
             >
-              Install the client →
+              Install →
             </.link>
           </div>
         </header>

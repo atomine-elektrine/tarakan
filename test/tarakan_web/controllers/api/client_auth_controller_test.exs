@@ -114,7 +114,7 @@ defmodule TarakanWeb.API.ClientAuthControllerTest do
     assert path == ~p"/accounts/log-in"
   end
 
-  test "a stale web session reauthenticates and returns to the approval", %{conn: conn} do
+  test "a signed-in session can approve without recent reauth", %{conn: conn} do
     start_response =
       conn
       |> post(~p"/api/client-auth/start", %{})
@@ -123,12 +123,18 @@ defmodule TarakanWeb.API.ClientAuthControllerTest do
     return_to = ~p"/client/authorize/#{start_response["user_code"]}"
     stale_at = DateTime.add(DateTime.utc_now(:second), -9 * 60, :minute)
 
-    assert {:error, {:redirect, %{to: path}}} =
-             build_conn()
-             |> log_in_account(account_fixture(), token_authenticated_at: stale_at)
-             |> live(return_to)
+    {:ok, view, _html} =
+      build_conn()
+      |> log_in_account(account_fixture(), token_authenticated_at: stale_at)
+      |> live(return_to)
 
-    assert path == TarakanWeb.AccountAuth.reauth_path(return_to)
+    assert has_element?(view, "#client-authorization-approve-button")
+
+    view
+    |> element("#client-authorization-approve-button")
+    |> render_click()
+
+    assert has_element?(view, "#client-authorization-approved")
   end
 
   test "invalid device codes fail without revealing authorization state", %{conn: conn} do

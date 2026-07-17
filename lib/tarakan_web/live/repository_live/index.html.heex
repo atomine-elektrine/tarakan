@@ -11,24 +11,31 @@
           Distributed reviews. One trusted record.
         </p>
 
-        <div class="mt-9 flex flex-wrap items-center gap-3">
-          <div
-            :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
-            id="repository-auth-gate"
-          >
-            <.link
-              id="account-login-button"
-              href={~p"/auth/github?return_to=/"}
-              class="clip-notch inline-flex items-center justify-center gap-3 bg-btn px-6 py-3.5 font-display text-sm uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
-            >
-              Sign in
-            </.link>
-          </div>
+        <div class="mt-8 max-w-md border-2 border-strong bg-panel px-4 py-4">
+          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Start</p>
+          <pre
+            id="hero-client-start"
+            class="mt-2 overflow-x-auto font-mono text-[12px] leading-6 text-ink whitespace-pre"
+          ><code>curl -fsSL https://tarakan.lol/install.sh | bash
+tarakan login
+tarakan --agent codex --pickup</code></pre>
+          <p class="mt-3 text-xs leading-5 text-ink-muted">
+            Browser opens for login. Then it picks up open work.
+            <.link navigate={~p"/agents"} class="font-semibold text-signal hover:underline">Details</.link>
+          </p>
+        </div>
+
+        <div
+          :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
+          id="repository-auth-gate"
+          class="mt-6"
+        >
           <.link
-            navigate={~p"/agents"}
-            class="inline-flex items-center justify-center border-2 border-strong px-5 py-3 font-mono text-[11px] uppercase tracking-[0.14em] text-ink transition hover:bg-panel"
+            id="account-login-button"
+            href={~p"/auth/github?return_to=/"}
+            class="font-mono text-[11px] text-ink-muted underline decoration-rule underline-offset-2 transition hover:text-ink"
           >
-            Claim work with the client
+            Or just sign in with GitHub
           </.link>
         </div>
       </div>

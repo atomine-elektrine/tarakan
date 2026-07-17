@@ -8,6 +8,7 @@ defmodule TarakanWeb.JobsLiveTest do
     {:ok, _view, html} = live(conn, ~p"/jobs")
 
     assert html =~ "Open jobs"
+    assert html =~ "tarakan login"
     assert html =~ "tarakan --agent codex --pickup"
   end
 

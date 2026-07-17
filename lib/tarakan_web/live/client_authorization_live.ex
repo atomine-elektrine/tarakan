@@ -1,38 +1,27 @@
 defmodule TarakanWeb.ClientAuthorizationLive do
   use TarakanWeb, :live_view
 
-  alias Tarakan.Accounts
   alias Tarakan.Accounts.ClientAuthorizations
-  alias TarakanWeb.AccountAuth
 
   @impl true
   def mount(%{"user_code" => user_code}, _session, socket) do
-    if Accounts.sudo_mode?(socket.assigns.current_scope.account) do
-      case ClientAuthorizations.get_for_browser(user_code) do
-        {:ok, authorization} ->
-          {:ok,
-           socket
-           |> assign(:authorization, authorization)
-           |> assign(
-             :display_code,
-             ClientAuthorizations.display_user_code(authorization.user_code)
-           )
-           |> assign(:page_title, "Authorize Tarakan Client")}
+    case ClientAuthorizations.get_for_browser(user_code) do
+      {:ok, authorization} ->
+        {:ok,
+         socket
+         |> assign(:authorization, authorization)
+         |> assign(
+           :display_code,
+           ClientAuthorizations.display_user_code(authorization.user_code)
+         )
+         |> assign(:page_title, "Authorize Tarakan Client")}
 
-        {:error, :not_found} ->
-          {:ok,
-           socket
-           |> assign(:authorization, nil)
-           |> assign(:display_code, user_code)
-           |> assign(:page_title, "Login request expired")}
-      end
-    else
-      return_to = ~p"/client/authorize/#{user_code}"
-
-      {:ok,
-       socket
-       |> put_flash(:error, "Confirm it's you before authorizing Tarakan Client.")
-       |> redirect(to: AccountAuth.reauth_path(return_to))}
+      {:error, :not_found} ->
+        {:ok,
+         socket
+         |> assign(:authorization, nil)
+         |> assign(:display_code, user_code)
+         |> assign(:page_title, "Login request expired")}
     end
   end
 
@@ -50,13 +39,13 @@ defmodule TarakanWeb.ClientAuthorizationLive do
         {:noreply,
          socket
          |> assign(:authorization, authorization)
-         |> put_flash(:info, "Tarakan Client authorized. You can return to your terminal.")}
+         |> put_flash(:info, "Connected. You can go back to the terminal.")}
 
       {:error, _reason} ->
         {:noreply,
          socket
          |> assign(:authorization, nil)
-         |> put_flash(:error, "This login request has expired or was already used.")}
+         |> put_flash(:error, "This login request expired or was already used.")}
     end
   end
 
@@ -68,7 +57,7 @@ defmodule TarakanWeb.ClientAuthorizationLive do
         {:noreply,
          socket
          |> assign(:authorization, authorization)
-         |> put_flash(:info, "Tarakan Client access denied.")}
+         |> put_flash(:info, "Denied.")}
 
       {:error, _reason} ->
         {:noreply, assign(socket, :authorization, nil)}
@@ -79,97 +68,65 @@ defmodule TarakanWeb.ClientAuthorizationLive do
   def render(assigns) do
     ~H"""
     <Layouts.app flash={@flash} current_scope={@current_scope}>
-      <Layouts.page
-        id="client-authorization-page"
-        width={:compact}
-        class={["py-12 sm:py-20"]}
-      >
+      <main id="client-authorization-page" class={["mx-auto max-w-xl px-5 py-12 sm:py-20"]}>
         <section class={[
           "border-2 border-strong bg-panel p-6 shadow-[8px_8px_0_0_var(--color-rule)] sm:p-8"
         ]}>
           <div class={["flex items-start gap-4"]}>
             <div class={[
-              "flex size-11 shrink-0 items-center justify-center border-2 border-strong bg-well text-ink"
+              "flex size-11 shrink-0 items-center justify-center border-2 border-strong bg-signal text-signal-fg"
             ]}>
               <.icon name="hero-command-line" class={["size-6"]} />
             </div>
-            <div>
-              <p class={["font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint"]}>
-                Device authorization
+            <div class={["min-w-0"]}>
+              <p class={["font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint"]}>
+                Tarakan client
               </p>
-              <h1 class={["mt-1 font-display text-2xl uppercase tracking-[0.04em] text-ink"]}>
-                Sign in to Tarakan Client
+              <h1 class={["mt-1 font-display text-2xl font-medium uppercase tracking-[0.04em] text-ink"]}>
+                Connect your terminal
               </h1>
+              <p class={["mt-2 text-sm leading-6 text-ink-muted"]}>
+                Approving lets the client claim jobs as @{@current_scope.account.handle}.
+              </p>
             </div>
           </div>
 
           <%= cond do %>
             <% is_nil(@authorization) -> %>
               <div id="client-authorization-expired" class={["mt-8 border-2 border-rule p-5"]}>
-                <p class={["font-semibold text-ink"]}>This login request is invalid or expired.</p>
-                <p class={["mt-2 text-sm leading-6 text-ink-muted"]}>
-                  Return to your terminal and run
-                  <span class={["font-mono text-ink"]}>tarakan login</span>
-                  again.
+                <p class={["text-sm text-ink"]}>
+                  That code is invalid or expired. Run <code class="font-mono">tarakan login</code> again.
                 </p>
               </div>
             <% @authorization.status == "approved" -> %>
               <div
                 id="client-authorization-approved"
-                class={["mt-8 border-2 border-strong bg-well p-5"]}
+                class={["mt-8 border-2 border-phosphor bg-ground p-5"]}
               >
-                <p class={["font-semibold text-ink"]}>Authorized</p>
-                <p class={["mt-2 text-sm leading-6 text-ink-muted"]}>
-                  The terminal will finish signing in automatically. You can close this tab.
-                </p>
+                <p class={["text-sm font-semibold text-ink"]}>Connected.</p>
+                <p class={["mt-1 text-sm text-ink-muted"]}>Back to your terminal.</p>
               </div>
             <% @authorization.status == "denied" -> %>
               <div id="client-authorization-denied" class={["mt-8 border-2 border-rule p-5"]}>
-                <p class={["font-semibold text-ink"]}>Access denied</p>
-                <p class={["mt-2 text-sm leading-6 text-ink-muted"]}>You can close this tab.</p>
+                <p class={["text-sm text-ink"]}>Denied. Nothing was granted.</p>
               </div>
             <% true -> %>
               <div id="client-authorization-pending" class={["mt-8"]}>
-                <p class={["text-sm leading-6 text-ink-muted"]}>
-                  Confirm that this code matches the one shown in your terminal:
+                <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>
+                  Code
                 </p>
                 <div
                   id="client-authorization-code"
                   class={[
-                    "mt-4 border-2 border-strong bg-well px-4 py-5 text-center font-mono text-3xl font-bold tracking-[0.18em] text-ink"
+                    "mt-2 border-2 border-strong bg-ground px-4 py-3 font-mono text-2xl tracking-[0.2em] text-ink sm:text-3xl"
                   ]}
                 >
                   {@display_code}
                 </div>
 
-                <div class={["mt-6 border-y-2 border-rule py-5"]}>
-                  <p class={["text-sm text-ink"]}>
-                    <span class={["font-semibold"]}>{@authorization.client_name}</span>
-                    will be able to:
-                  </p>
-                  <ul
-                    id="client-authorization-scopes"
-                    class={["mt-3 space-y-2 text-sm text-ink-muted"]}
-                  >
-                    <li class={["flex gap-2"]}>
-                      <.icon name="hero-check" class={["mt-0.5 size-4 text-ink"]} />
-                      Read and claim public security jobs
-                    </li>
-                    <li class={["flex gap-2"]}>
-                      <.icon name="hero-check" class={["mt-0.5 size-4 text-ink"]} />
-                      Submit job results and security reports
-                    </li>
-                    <li class={["flex gap-2"]}>
-                      <.icon name="hero-check" class={["mt-0.5 size-4 text-ink"]} />
-                      Not independent verification (mint a verify-scoped token in settings if needed)
-                    </li>
-                  </ul>
-                </div>
-
-                <p class={["mt-5 text-xs leading-5 text-ink-faint"]}>
-                  A revocable credential will be created for
-                  <span class={["font-mono"]}>@{@current_scope.account.handle}</span>
-                  and expire after {ClientAuthorizations.credential_validity_days()} days.
+                <p class={["mt-5 text-sm text-ink-muted"]}>
+                  {@authorization.client_name} can claim jobs and submit reviews for
+                  about 7 days. Revoke anytime in settings.
                 </p>
 
                 <div class={["mt-6 grid gap-3 sm:grid-cols-2"]}>
@@ -177,7 +134,7 @@ defmodule TarakanWeb.ClientAuthorizationLive do
                     id="client-authorization-deny-button"
                     phx-click="deny"
                     class={[
-                      "h-11 border-2 border-strong px-4 font-display text-sm uppercase tracking-[0.12em] text-ink transition hover:bg-well"
+                      "flex h-12 items-center justify-center border-2 border-strong px-4 font-display text-sm uppercase tracking-[0.14em] text-ink transition hover:bg-ground"
                     ]}
                   >
                     Deny
@@ -186,17 +143,16 @@ defmodule TarakanWeb.ClientAuthorizationLive do
                     id="client-authorization-approve-button"
                     phx-click="approve"
                     class={[
-                      "clip-notch h-11 bg-btn px-4 font-display text-sm uppercase tracking-[0.12em] text-btn-fg transition hover:opacity-90"
+                      "clip-notch flex h-12 items-center justify-center bg-btn px-4 font-display text-sm uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90"
                     ]}
-                    phx-disable-with="Authorizing…"
                   >
-                    Authorize client
+                    Approve
                   </button>
                 </div>
               </div>
           <% end %>
         </section>
-      </Layouts.page>
+      </main>
     </Layouts.app>
     """
   end

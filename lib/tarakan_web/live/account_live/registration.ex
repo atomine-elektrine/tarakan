@@ -13,11 +13,8 @@ defmodule TarakanWeb.AccountLive.Registration do
           <.header>
             Join Tarakan
             <:subtitle>
-              Already registered?
-              <.link
-                navigate={~p"/accounts/log-in"}
-                class="font-semibold text-signal hover:underline"
-              >
+              Fastest path: GitHub. Already here?
+              <.link navigate={~p"/accounts/log-in"} class="font-semibold text-signal hover:underline">
                 Log in
               </.link>
             </:subtitle>
@@ -41,44 +38,44 @@ defmodule TarakanWeb.AccountLive.Registration do
           </.link>
         </div>
 
-        <div class="flex items-center gap-3 py-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-          <span class="h-px flex-1 bg-rule"></span>or claim a handle with email<span class="h-px flex-1 bg-rule"></span>
-        </div>
-
-        <.form
-          for={@form}
-          id="registration_form"
-          phx-submit="save"
-          phx-change="validate"
-          class="space-y-4 border-2 border-strong bg-panel p-6"
-        >
-          <.input
-            field={@form[:handle]}
-            type="text"
-            label="Handle"
-            autocomplete="username"
-            spellcheck="false"
-            placeholder="signalghost"
-            required
-            phx-mounted={JS.focus()}
-          />
-          <.input
-            field={@form[:email]}
-            type="email"
-            label="Email"
-            autocomplete="email"
-            spellcheck="false"
-            required
-          />
-
-          <button
-            type="submit"
-            phx-disable-with="Creating account..."
-            class="clip-notch inline-flex h-11 w-full items-center justify-center bg-btn px-4 font-display text-sm uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
+        <details class="mt-6 group border-2 border-rule">
+          <summary class="cursor-pointer px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint transition hover:text-ink">
+            Prefer email instead
+          </summary>
+          <.form
+            for={@form}
+            id="registration_form"
+            phx-submit="save"
+            phx-change="validate"
+            class="space-y-4 border-t-2 border-rule bg-panel p-6"
           >
-            Create account
-          </button>
-        </.form>
+            <.input
+              field={@form[:handle]}
+              type="text"
+              label="Handle"
+              autocomplete="username"
+              spellcheck="false"
+              placeholder="signalghost"
+              required
+            />
+            <.input
+              field={@form[:email]}
+              type="email"
+              label="Email"
+              autocomplete="email"
+              spellcheck="false"
+              required
+            />
+
+            <button
+              type="submit"
+              phx-disable-with="Creating account..."
+              class="clip-notch inline-flex h-11 w-full items-center justify-center bg-btn px-4 font-display text-sm uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-phosphor"
+            >
+              Email me a link
+            </button>
+          </.form>
+        </details>
 
         <.form
           for={@login_form}

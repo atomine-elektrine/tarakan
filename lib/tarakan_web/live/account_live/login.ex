@@ -13,13 +13,9 @@ defmodule TarakanWeb.AccountLive.Login do
             <p>Log in</p>
             <:subtitle>
               <%= if @current_scope && @current_scope.account do %>
-                Reauthenticate or connect another code host.
+                Confirm it's you, or connect another host.
               <% else %>
-                New to Tarakan? <.link
-                  navigate={~p"/accounts/register"}
-                  class="font-semibold text-signal hover:underline"
-                  phx-no-format
-                >Create one</.link>.
+                One click. No password required.
               <% end %>
             </:subtitle>
           </.header>
@@ -56,7 +52,7 @@ defmodule TarakanWeb.AccountLive.Login do
         </div>
 
         <div class="flex items-center gap-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-          <span class="h-px flex-1 bg-rule"></span>or use email<span class="h-px flex-1 bg-rule"></span>
+          <span class="h-px flex-1 bg-rule"></span>email<span class="h-px flex-1 bg-rule"></span>
         </div>
 
         <.form

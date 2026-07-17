@@ -417,7 +417,7 @@ defmodule Tarakan.Work do
   Finding-kind Requests with a Tarakan Review/Scan Format `document` create a
   linked Review (findings). Legacy prose (`summary` + `evidence`) remains when
   `:request_completion_mode` is `:document_or_legacy_prose` and no document is
-  present. See design docs/designs/2026-07-12-review-request-domain-collapse.md.
+  present.
   """
   def submit_task(%ReviewTask{} = task, %Account{} = account, attrs) do
     submit_task(task, Scope.for_account(account), attrs)

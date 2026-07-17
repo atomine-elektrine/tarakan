@@ -105,16 +105,12 @@ defmodule TarakanWeb.AccountLive.LoginTest do
   end
 
   describe "login navigation" do
-    test "redirects to native registration when Create one is clicked", %{conn: conn} do
-      {:ok, lv, _html} = live(conn, ~p"/accounts/log-in")
+    test "github is the primary path for new users", %{conn: conn} do
+      {:ok, _lv, html} = live(conn, ~p"/accounts/log-in")
 
-      {:ok, _login_live, login_html} =
-        lv
-        |> element("main a", "Create one")
-        |> render_click()
-        |> follow_redirect(conn, ~p"/accounts/register")
-
-      assert login_html =~ "Join Tarakan"
+      assert html =~ "One click. No password required."
+      assert html =~ ~s(id="github-login-button")
+      assert html =~ "Continue with GitHub"
     end
   end
 
@@ -127,7 +123,8 @@ defmodule TarakanWeb.AccountLive.LoginTest do
     test "shows login page with email filled in", %{conn: conn, account: account} do
       {:ok, _lv, html} = live(conn, ~p"/accounts/log-in")
 
-      assert html =~ "Reauthenticate or connect another code host"
+      assert html =~ "Confirm it"
+      assert html =~ "connect another host"
       assert html =~ "Email me a login link"
 
       assert html =~
