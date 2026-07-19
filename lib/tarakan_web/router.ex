@@ -21,8 +21,9 @@ defmodule TarakanWeb.Router do
     }
 
     plug TarakanWeb.Plugs.CodeBrowserHeaders
-    plug TarakanWeb.Plugs.CodeBrowserRateLimit
+    # After session/scope so admins/moderators can be exempted from the budget.
     plug :fetch_current_scope_for_account
+    plug TarakanWeb.Plugs.CodeBrowserRateLimit
   end
 
   pipeline :api do

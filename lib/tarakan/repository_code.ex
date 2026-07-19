@@ -50,22 +50,26 @@ defmodule Tarakan.RepositoryCode do
           | :invalid_response
 
   @doc "Browses a root, directory, or bounded UTF-8 file at an exact full commit SHA."
-  @spec browse(%Repository{}, String.t(), String.t() | nil) ::
+  @spec browse(%Repository{}, String.t(), String.t() | nil, keyword()) ::
           {:ok, Tree.t() | File.t()} | {:error, browse_error()}
-  def browse(%Repository{} = repository, commit_sha, path) do
-    with {:ok, repository} <- canonical_repository(repository),
-         {:ok, commit_sha} <- normalize_commit_sha(commit_sha),
-         {:ok, path} <- RepositoryPath.normalize(path),
-         {:ok, repository} <- current_identity(repository),
-         {:ok, commit} <- fetch_commit(repository, commit_sha),
-         {:ok, result} <- browse_commit_path(repository, commit, path, false),
-         {:ok, _metadata} <- verify_public_identity(repository, force: true) do
-      maybe_enqueue_mirror(repository, commit_sha)
-      {:ok, result}
-    end
+  def browse(repository, commit_sha, path, opts \\ [])
+
+  def browse(%Repository{} = repository, commit_sha, path, opts) when is_list(opts) do
+    with_rate_limit_opts(opts, fn ->
+      with {:ok, repository} <- canonical_repository(repository),
+           {:ok, commit_sha} <- normalize_commit_sha(commit_sha),
+           {:ok, path} <- RepositoryPath.normalize(path),
+           {:ok, repository} <- current_identity(repository),
+           {:ok, commit} <- fetch_commit(repository, commit_sha),
+           {:ok, result} <- browse_commit_path(repository, commit, path, false),
+           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
+        maybe_enqueue_mirror(repository, commit_sha)
+        {:ok, result}
+      end
+    end)
   end
 
-  def browse(_repository, _commit_sha, _path), do: {:error, :not_found}
+  def browse(_repository, _commit_sha, _path, _opts), do: {:error, :not_found}
 
   @doc "Lists a complete directory, optionally recursively, and rejects truncated responses."
   @spec list_tree(%Repository{}, String.t(), String.t() | nil, keyword()) ::
@@ -92,9 +96,19 @@ defmodule Tarakan.RepositoryCode do
   end
 
   @doc "Resolves the repository's current default branch to a full immutable commit SHA."
-  @spec resolve_default_commit(%Repository{}) ::
+  @spec resolve_default_commit(%Repository{}, keyword()) ::
           {:ok, String.t()} | {:error, browse_error()}
-  def resolve_default_commit(%Repository{} = repository) do
+  def resolve_default_commit(repository, opts \\ [])
+
+  def resolve_default_commit(%Repository{} = repository, opts) when is_list(opts) do
+    with_rate_limit_opts(opts, fn ->
+      do_resolve_default_commit(repository)
+    end)
+  end
+
+  def resolve_default_commit(_repository, _opts), do: {:error, :not_found}
+
+  defp do_resolve_default_commit(%Repository{} = repository) do
     with {:ok, repository} <- canonical_repository(repository) do
       if Repository.hosted?(repository) do
         resolve_hosted_head(repository)
@@ -112,8 +126,6 @@ defmodule Tarakan.RepositoryCode do
       end
     end
   end
-
-  def resolve_default_commit(_repository), do: {:error, :not_found}
 
   @doc """
   Resolves any branch tip to a full immutable commit SHA.
@@ -644,28 +656,32 @@ defmodule Tarakan.RepositoryCode do
   end
 
   defp upstream_preflight(%Repository{id: repository_id}) do
-    limits =
-      Application.get_env(:tarakan, __MODULE__,
-        global_upstream_limit: 240,
-        repository_upstream_limit: 60,
-        upstream_window_seconds: 60
-      )
-
-    window = Keyword.fetch!(limits, :upstream_window_seconds)
-
-    with :ok <-
-           rate_check(
-             {:repository_code_upstream_repository, repository_id},
-             Keyword.fetch!(limits, :repository_upstream_limit),
-             window
-           ),
-         :ok <-
-           rate_check(
-             {:repository_code_upstream_global, node()},
-             Keyword.fetch!(limits, :global_upstream_limit),
-             window
-           ) do
+    if Process.get(:tarakan_skip_code_rate_limit) do
       :ok
+    else
+      limits =
+        Application.get_env(:tarakan, __MODULE__,
+          global_upstream_limit: 480,
+          repository_upstream_limit: 120,
+          upstream_window_seconds: 60
+        )
+
+      window = Keyword.fetch!(limits, :upstream_window_seconds)
+
+      with :ok <-
+             rate_check(
+               {:repository_code_upstream_repository, repository_id},
+               Keyword.fetch!(limits, :repository_upstream_limit),
+               window
+             ),
+           :ok <-
+             rate_check(
+               {:repository_code_upstream_global, node()},
+               Keyword.fetch!(limits, :global_upstream_limit),
+               window
+             ) do
+        :ok
+      end
     end
   end
 
@@ -673,6 +689,24 @@ defmodule Tarakan.RepositoryCode do
     case RateLimiter.check(key, limit, period) do
       :ok -> :ok
       {:error, _reason, _retry_after} -> {:error, :rate_limited}
+    end
+  end
+
+  defp with_rate_limit_opts(opts, fun) when is_list(opts) and is_function(fun, 0) do
+    previous = Process.get(:tarakan_skip_code_rate_limit)
+
+    if Keyword.get(opts, :skip_rate_limit, false) do
+      Process.put(:tarakan_skip_code_rate_limit, true)
+    end
+
+    try do
+      fun.()
+    after
+      if previous do
+        Process.put(:tarakan_skip_code_rate_limit, previous)
+      else
+        Process.delete(:tarakan_skip_code_rate_limit)
+      end
     end
   end
 

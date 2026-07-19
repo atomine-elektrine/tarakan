@@ -12,10 +12,11 @@ defmodule TarakanWeb.RepositoryCodeLive do
 
   @commit_sha_pattern ~r/^[0-9a-f]{40}$/
   @line_range_pattern ~r/^([1-9][0-9]{0,8})(?:-([1-9][0-9]{0,8}))?$/
-  @browse_limit 30
+  @browse_limit 120
   @browse_window_seconds 60
-  @mount_limit 60
+  @mount_limit 180
   @mount_window_seconds 60
+  @unlimited_roles ~w(admin moderator)
   @max_rendered_lines 10_000
   @max_selected_line 1_000_000
   @max_selected_span 1_000
@@ -25,7 +26,7 @@ defmodule TarakanWeb.RepositoryCodeLive do
     {action, params} = normalize_route_params(socket.assigns.live_action, params)
     socket = assign(socket, :live_action, action)
 
-    with :ok <- allow_mount?(socket.assigns.client_ip),
+    with :ok <- allow_mount?(socket),
          {:ok, source} <- source_from_params(action, params, socket) do
       repository = source.repository
 
@@ -328,13 +329,14 @@ defmodule TarakanWeb.RepositoryCodeLive do
       commit_sha = socket.assigns.commit_sha
       path = socket.assigns.path
       client_ip = socket.assigns.client_ip
+      skip_rate_limit = unlimited_scope?(socket.assigns.current_scope)
 
       socket
       |> cancel_async(:browse)
       |> start_async(:browse, fn ->
         result =
-          with :ok <- allow_browse?(client_ip) do
-            run_request(request_kind, repository, commit_sha, path)
+          with :ok <- allow_browse?(client_ip, skip_rate_limit) do
+            run_request(request_kind, repository, commit_sha, path, skip_rate_limit)
           end
 
         {request_id, result}
@@ -346,10 +348,12 @@ defmodule TarakanWeb.RepositoryCodeLive do
 
   defp maybe_start_request(socket), do: socket
 
-  defp run_request(:browse, repository, commit_sha, path) do
-    with {:ok, current_commit_sha} <- RepositoryCode.resolve_default_commit(repository),
+  defp run_request(:browse, repository, commit_sha, path, skip_rate_limit) do
+    opts = code_opts(skip_rate_limit)
+
+    with {:ok, current_commit_sha} <- RepositoryCode.resolve_default_commit(repository, opts),
          true <- Plug.Crypto.secure_compare(current_commit_sha, commit_sha),
-         {:ok, result} <- RepositoryCode.browse(repository, commit_sha, path) do
+         {:ok, result} <- RepositoryCode.browse(repository, commit_sha, path, opts) do
       {:ok, result}
     else
       false -> {:error, :not_found}
@@ -357,18 +361,32 @@ defmodule TarakanWeb.RepositoryCodeLive do
     end
   end
 
-  defp run_request(:browse_finding, repository, commit_sha, path) do
-    RepositoryCode.browse(repository, commit_sha, path)
+  defp run_request(:browse_finding, repository, commit_sha, path, skip_rate_limit) do
+    RepositoryCode.browse(repository, commit_sha, path, code_opts(skip_rate_limit))
   end
 
-  defp run_request(:resolve_entry, repository, _commit_sha, _path) do
-    with {:ok, commit_sha} <- RepositoryCode.resolve_default_commit(repository),
-         {:ok, result} <- RepositoryCode.browse(repository, commit_sha, "") do
+  defp run_request(:resolve_entry, repository, _commit_sha, _path, skip_rate_limit) do
+    opts = code_opts(skip_rate_limit)
+
+    with {:ok, commit_sha} <- RepositoryCode.resolve_default_commit(repository, opts),
+         {:ok, result} <- RepositoryCode.browse(repository, commit_sha, "", opts) do
       {:ok, result}
     end
   end
 
-  defp allow_browse?(client_ip) do
+  defp code_opts(true), do: [skip_rate_limit: true]
+  defp code_opts(false), do: []
+
+  defp unlimited_scope?(%{platform_role: role}) when role in @unlimited_roles, do: true
+
+  defp unlimited_scope?(%{account: %{platform_role: role}}) when role in @unlimited_roles,
+    do: true
+
+  defp unlimited_scope?(_), do: false
+
+  defp allow_browse?(_client_ip, true), do: :ok
+
+  defp allow_browse?(client_ip, false) do
     case RateLimiter.check(
            {:repository_code_browse, client_ip},
            @browse_limit,
@@ -380,14 +398,18 @@ defmodule TarakanWeb.RepositoryCodeLive do
     end
   end
 
-  defp allow_mount?(client_ip) do
-    case RateLimiter.check(
-           {:repository_code_mount, client_ip},
-           @mount_limit,
-           @mount_window_seconds
-         ) do
-      :ok -> :ok
-      {:error, _reason, _retry_after} -> {:error, :rate_limited}
+  defp allow_mount?(socket) do
+    if unlimited_scope?(socket.assigns.current_scope) do
+      :ok
+    else
+      case RateLimiter.check(
+             {:repository_code_mount, socket.assigns.client_ip},
+             @mount_limit,
+             @mount_window_seconds
+           ) do
+        :ok -> :ok
+        {:error, _reason, _retry_after} -> {:error, :rate_limited}
+      end
     end
   end
 

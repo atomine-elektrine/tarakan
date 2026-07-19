@@ -5,7 +5,8 @@ defmodule TarakanWeb.Plugs.CodeBrowserRateLimit do
 
   alias Tarakan.RateLimiter
 
-  @defaults [request_limit: 60, window_seconds: 60]
+  @defaults [request_limit: 180, window_seconds: 60]
+  @unlimited_roles ~w(admin moderator)
 
   def init(opts) do
     configured = Application.get_env(:tarakan, __MODULE__, [])
@@ -13,10 +14,23 @@ defmodule TarakanWeb.Plugs.CodeBrowserRateLimit do
   end
 
   def call(conn, opts) do
-    if code_browser_path?(conn.path_info) do
-      check_request(conn, opts)
-    else
-      conn
+    cond do
+      not code_browser_path?(conn.path_info) ->
+        conn
+
+      unlimited_actor?(conn) ->
+        conn
+
+      true ->
+        check_request(conn, opts)
+    end
+  end
+
+  defp unlimited_actor?(conn) do
+    case conn.assigns[:current_scope] do
+      %{platform_role: role} when role in @unlimited_roles -> true
+      %{account: %{platform_role: role}} when role in @unlimited_roles -> true
+      _ -> false
     end
   end
 
