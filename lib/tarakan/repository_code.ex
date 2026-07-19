@@ -618,16 +618,9 @@ defmodule Tarakan.RepositoryCode do
     if rest_fallback_enabled?() do
       with :ok <- upstream_preflight(repository) do
         case fun.() do
-          {:error, :rate_limited} ->
-            # Prefer a neutral unavailable over "code browser is busy".
-            {:error, :unavailable}
-
-          result ->
-            case verify_public_identity(repository, force: true) do
-              {:ok, _} -> result
-              {:error, :rate_limited} -> result
-              {:error, reason} -> {:error, reason}
-            end
+          # Map GitHub REST quota to a neutral error (not "identity changed").
+          {:error, :rate_limited} -> {:error, :unavailable}
+          result -> result
         end
       end
     else
@@ -643,18 +636,7 @@ defmodule Tarakan.RepositoryCode do
 
   # Operators skipping rate limits also skip the mandatory REST identity re-check
   # so mass code browsing stays on the git mirror path only.
-  defp maybe_final_identity_check(repository, opts) do
-    if Keyword.get(opts, :skip_rate_limit, false) or Process.get(:tarakan_skip_code_rate_limit) do
-      :ok
-    else
-      case verify_public_identity(repository, force: true) do
-        {:ok, _} -> :ok
-        # Never surface GitHub REST quota as "code browser is busy".
-        {:error, :rate_limited} -> :ok
-        {:error, reason} -> {:error, reason}
-      end
-    end
-  end
+  defp maybe_final_identity_check(_repository, _opts), do: :ok
 
   # Hot-tier admission: keep background mirror warm. Never break the request.
   defp maybe_enqueue_mirror(repository, commit_sha) do
@@ -805,20 +787,10 @@ defmodule Tarakan.RepositoryCode do
     end
   end
 
-  defp current_identity(repository) do
-    case verify_public_identity(repository) do
-      {:ok, metadata} ->
-        {:ok, rebind_identity(repository, metadata)}
-
-      # Code is served from git mirrors; do not block browsing when GitHub's
-      # REST identity budget is exhausted.
-      {:error, :rate_limited} ->
-        {:ok, repository}
-
-      {:error, reason} ->
-        {:error, reason}
-    end
-  end
+  # Code browsing uses the registered owner/name + git mirrors. REST identity
+  # checks can bump cache generations / return identity_changed and must not
+  # run on the browse hot path. Sweeps handle renames and delisting.
+  defp current_identity(repository), do: {:ok, repository}
 
   # Continue the request under the host's current canonical owner/name so a
   # just-renamed repository doesn't 301 on every object fetch.

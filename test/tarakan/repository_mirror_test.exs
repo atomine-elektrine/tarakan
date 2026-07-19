@@ -135,8 +135,8 @@ defmodule Tarakan.RepositoryMirrorTest do
     assert InstrumentedGitHubClient.count(:commit) == 0
     assert InstrumentedGitHubClient.count(:tree) == 0
     assert InstrumentedGitHubClient.count(:blob) == 0
-    # Identity is still verified through the (ETag-cheap) API - fail-closed.
-    assert InstrumentedGitHubClient.count(:repository) > 0
+    # Browse no longer requires REST identity when the mirror has the objects.
+    assert InstrumentedGitHubClient.count(:repository) == 0
   end
 
   test "browsing an unmirrored commit enqueues a mirror job", %{repository: repository} do
