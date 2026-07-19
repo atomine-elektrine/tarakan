@@ -170,6 +170,8 @@ defmodule Tarakan.Repositories do
     Repository
     |> where([repository], repository.listing_status in ^listing_statuses)
     |> maybe_filter_status(Keyword.get(opts, :status))
+    |> maybe_filter_min_stars(Keyword.get(opts, :min_stars))
+    |> maybe_filter_language(Keyword.get(opts, :language))
     |> order_by([repository],
       desc: repository.status == "unscanned",
       desc: repository.inserted_at
@@ -183,6 +185,24 @@ defmodule Tarakan.Repositories do
   end
 
   defp maybe_filter_status(query, _status), do: query
+
+  defp maybe_filter_min_stars(query, min_stars) when is_integer(min_stars) and min_stars > 0 do
+    where(query, [repository], repository.stars_count >= ^min_stars)
+  end
+
+  defp maybe_filter_min_stars(query, _min_stars), do: query
+
+  defp maybe_filter_language(query, language) when is_binary(language) do
+    case String.trim(language) do
+      "" ->
+        query
+
+      lang ->
+        where(query, [repository], ilike(repository.primary_language, ^lang))
+    end
+  end
+
+  defp maybe_filter_language(query, _language), do: query
 
   @doc "Lists all repository relationship records for an account."
   def list_account_memberships(%Account{id: account_id}) do

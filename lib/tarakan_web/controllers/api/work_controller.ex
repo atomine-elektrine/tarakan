@@ -39,10 +39,51 @@ defmodule TarakanWeb.API.WorkController do
         _ -> nil
       end
 
-    tasks = Work.list_open_claimable_tasks(limit: limit, account_id: account_id)
+    opts =
+      [
+        limit: limit,
+        account_id: account_id,
+        min_stars: parse_min_stars(params["min_stars"]),
+        language: parse_language(params["language"] || params["lang"]),
+        kind: parse_kind(params["kind"])
+      ]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+
+    tasks = Work.list_open_claimable_tasks(opts)
     encoded = Enum.map(tasks, &task_json/1)
     json(conn, %{jobs: encoded})
   end
+
+  defp parse_min_stars(nil), do: nil
+
+  defp parse_min_stars(value) do
+    case Integer.parse(to_string(value)) do
+      {n, _} when n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_language(nil), do: nil
+
+  defp parse_language(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      lang -> lang
+    end
+  end
+
+  defp parse_language(_), do: nil
+
+  defp parse_kind(nil), do: nil
+
+  defp parse_kind(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      kind -> kind
+    end
+  end
+
+  defp parse_kind(_), do: nil
 
   defp visible_repository(host_slug, owner, name, scope) do
     case Tarakan.Hosts.host_for_slug(host_slug) do
@@ -235,6 +276,8 @@ defmodule TarakanWeb.API.WorkController do
       name: repository.name,
       canonical_url: repository.canonical_url,
       participation_mode: repository.participation_mode,
+      primary_language: repository.primary_language,
+      stars_count: repository.stars_count,
       record_url:
         TarakanWeb.Endpoint.url() <> TarakanWeb.RepositoryPaths.repository_path(repository)
     }

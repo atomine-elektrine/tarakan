@@ -174,6 +174,7 @@ defmodule Tarakan.Work do
         repository.listing_status == "listed" and
           task.visibility in ["public_summary", "public"]
       )
+      |> maybe_filter_task_repository(opts)
 
     base =
       if is_integer(account_id) do
@@ -209,6 +210,43 @@ defmodule Tarakan.Work do
     |> Repo.all()
     |> preload_task()
   end
+
+  defp maybe_filter_task_repository(query, opts) do
+    query
+    |> maybe_filter_min_stars(Keyword.get(opts, :min_stars))
+    |> maybe_filter_language(Keyword.get(opts, :language))
+    |> maybe_filter_kind(Keyword.get(opts, :kind))
+  end
+
+  defp maybe_filter_min_stars(query, min_stars) when is_integer(min_stars) and min_stars > 0 do
+    where(query, [_task, repository], repository.stars_count >= ^min_stars)
+  end
+
+  defp maybe_filter_min_stars(query, _min_stars), do: query
+
+  defp maybe_filter_language(query, language) when is_binary(language) do
+    case String.trim(language) do
+      "" ->
+        query
+
+      lang ->
+        where(query, [_task, repository], ilike(repository.primary_language, ^lang))
+    end
+  end
+
+  defp maybe_filter_language(query, _language), do: query
+
+  defp maybe_filter_kind(query, kind) when is_binary(kind) do
+    case String.trim(kind) do
+      "" ->
+        query
+
+      value ->
+        where(query, [task, _repository], task.kind == ^value)
+    end
+  end
+
+  defp maybe_filter_kind(query, _kind), do: query
 
   def get_task!(id), do: ReviewTask |> Repo.get!(id) |> preload_task()
 

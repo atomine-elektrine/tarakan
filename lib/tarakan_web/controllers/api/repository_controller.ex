@@ -11,11 +11,16 @@ defmodule TarakanWeb.API.RepositoryController do
   alias Tarakan.Repositories
 
   def index(conn, params) do
-    repositories =
-      Repositories.list_reviewable_repositories(
+    opts =
+      [
         status: params["status"],
-        limit: parse_limit(params["limit"])
-      )
+        limit: parse_limit(params["limit"]),
+        min_stars: parse_min_stars(params["min_stars"]),
+        language: parse_language(params["language"] || params["lang"])
+      ]
+      |> Enum.reject(fn {_k, v} -> is_nil(v) or v == "" end)
+
+    repositories = Repositories.list_reviewable_repositories(opts)
 
     json(conn, %{repositories: Enum.map(repositories, &repository_json/1)})
   end
@@ -105,6 +110,26 @@ defmodule TarakanWeb.API.RepositoryController do
 
   defp parse_limit(_), do: 100
 
+  defp parse_min_stars(nil), do: nil
+
+  defp parse_min_stars(value) do
+    case Integer.parse(to_string(value)) do
+      {n, _} when n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp parse_language(nil), do: nil
+
+  defp parse_language(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      lang -> lang
+    end
+  end
+
+  defp parse_language(_), do: nil
+
   defp repository_json(repository) do
     status = Map.get(repository, :status) || repository.listing_status
 
@@ -116,6 +141,7 @@ defmodule TarakanWeb.API.RepositoryController do
       listing_status: repository.listing_status,
       default_branch: repository.default_branch,
       primary_language: repository.primary_language,
+      stars_count: repository.stars_count,
       scan_count: repository.scan_count,
       last_scanned_at: repository.last_scanned_at,
       registered_at: repository.inserted_at,

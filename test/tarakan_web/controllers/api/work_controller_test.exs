@@ -58,6 +58,42 @@ defmodule TarakanWeb.API.WorkControllerTest do
     assert match["status"] == "open"
     assert match["repository"]["owner"] == repository.owner
     assert match["repository"]["name"] == repository.name
+    assert match["repository"]["primary_language"] == repository.primary_language
+    assert match["repository"]["stars_count"] == repository.stars_count
+  end
+
+  test "global jobs queue filters by language and min stars", %{
+    conn: conn,
+    creator: creator,
+    repository: repository,
+    worker_token: token
+  } do
+    task = review_task_fixture(repository, creator)
+
+    # Fixture repo is Rust with 42000 stars (GitHub stub).
+    conn =
+      conn
+      |> authed(token)
+      |> get(~p"/api/jobs", %{"language" => "Rust", "min_stars" => "1000"})
+
+    assert %{"jobs" => jobs} = json_response(conn, 200)
+    assert Enum.any?(jobs, &(&1["id"] == task.id))
+
+    conn =
+      build_conn()
+      |> authed(token)
+      |> get(~p"/api/jobs", %{"language" => "Elixir"})
+
+    assert %{"jobs" => jobs} = json_response(conn, 200)
+    refute Enum.any?(jobs, &(&1["id"] == task.id))
+
+    conn =
+      build_conn()
+      |> authed(token)
+      |> get(~p"/api/jobs", %{"min_stars" => "999999"})
+
+    assert %{"jobs" => jobs} = json_response(conn, 200)
+    refute Enum.any?(jobs, &(&1["id"] == task.id))
   end
 
   test "global jobs queue includes the caller's active claims", %{
