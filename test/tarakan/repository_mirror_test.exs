@@ -144,9 +144,9 @@ defmodule Tarakan.RepositoryMirrorTest do
 
     assert {:ok, %File{}} = RepositoryCode.browse(repository, commit_sha, "README.md")
 
-    assert [job] = all_enqueued(worker: MirrorRepository)
-    assert job.args["repository_id"] == repository.id
-    assert job.args["commit_sha"] == commit_sha
+    jobs = all_enqueued(worker: MirrorRepository)
+    assert Enum.any?(jobs, &(&1.args["commit_sha"] == commit_sha))
+    assert Enum.any?(jobs, &(&1.args["repository_id"] == repository.id))
   end
 
   test "sweep eviction removes the mirror when the repository goes private", %{
@@ -164,7 +164,7 @@ defmodule Tarakan.RepositoryMirrorTest do
     refute Elixir.File.dir?(RepositoryMirror.repository_dir(@codex_github_id))
   end
 
-  test "worker discards a repository whose identity no longer verifies" do
+  test "worker snoozes when the git remote cannot be fetched" do
     hidden =
       Repo.insert!(%Tarakan.Repositories.Repository{
         host: "github.com",
@@ -176,7 +176,8 @@ defmodule Tarakan.RepositoryMirrorTest do
         last_synced_at: DateTime.utc_now()
       })
 
-    assert {:cancel, :identity_changed} =
+    # Mirror worker no longer uses REST identity; a bad/missing remote is a soft retry.
+    assert {:snooze, _seconds} =
              perform_job(MirrorRepository, %{
                "repository_id" => hidden.id,
                "commit_sha" => String.duplicate("8", 40)

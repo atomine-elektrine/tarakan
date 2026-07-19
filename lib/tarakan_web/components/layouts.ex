@@ -453,7 +453,7 @@ defmodule TarakanWeb.Layouts do
         <div class="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-10 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p class="flex items-center gap-2.5 font-display text-base font-bold uppercase tracking-[0.08em] text-ink">
-              <.logo_mark class="size-5" /> Tarakan
+              <.logo_mark class="size-5 text-signal" /> Tarakan
             </p>
             <p class="mt-3 max-w-xs text-sm leading-6 text-ink-muted">
               Public disclosure by default.

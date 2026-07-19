@@ -5,7 +5,8 @@ defmodule TarakanWeb.Plugs.CodeBrowserRateLimit do
 
   alias Tarakan.RateLimiter
 
-  @defaults [request_limit: 180, window_seconds: 60]
+  # High ceiling: code is served from local git mirrors; this only blocks abuse floods.
+  @defaults [request_limit: 2_000, window_seconds: 60]
   @unlimited_roles ~w(admin moderator)
 
   def init(opts) do

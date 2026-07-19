@@ -452,11 +452,16 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :not_found}
       end
     else
-      github_object(repository, commit_sha, fn ->
-        RepositoryMirror.read_commit(repository.github_id, commit_sha)
-      end, fn ->
-        GitHub.fetch_commit(repository.owner, repository.name, commit_sha)
-      end)
+      github_object(
+        repository,
+        commit_sha,
+        fn ->
+          RepositoryMirror.read_commit(repository.github_id, commit_sha)
+        end,
+        fn ->
+          GitHub.fetch_commit(repository.owner, repository.name, commit_sha)
+        end
+      )
     end
   end
 
@@ -562,10 +567,13 @@ defmodule Tarakan.RepositoryCode do
   defp rest_fallback(repository, fun) when is_function(fun, 0) do
     if rest_fallback_enabled?() do
       with :ok <- upstream_preflight(repository),
-           result <- fun.(),
-           # Only REST paths re-check public identity (git fetch already fails closed).
-           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
-        result
+           result <- fun.() do
+        case verify_public_identity(repository, force: true) do
+          {:ok, _} -> result
+          # Do not turn GitHub API quota into a code-browser hard failure.
+          {:error, :rate_limited} -> result
+          {:error, reason} -> {:error, reason}
+        end
       end
     else
       {:error, :unavailable}
@@ -586,6 +594,8 @@ defmodule Tarakan.RepositoryCode do
     else
       case verify_public_identity(repository, force: true) do
         {:ok, _} -> :ok
+        # Never surface GitHub REST quota as "code browser is busy".
+        {:error, :rate_limited} -> :ok
         {:error, reason} -> {:error, reason}
       end
     end
@@ -741,8 +751,17 @@ defmodule Tarakan.RepositoryCode do
   end
 
   defp current_identity(repository) do
-    with {:ok, metadata} <- verify_public_identity(repository) do
-      {:ok, rebind_identity(repository, metadata)}
+    case verify_public_identity(repository) do
+      {:ok, metadata} ->
+        {:ok, rebind_identity(repository, metadata)}
+
+      # Code is served from git mirrors; do not block browsing when GitHub's
+      # REST identity budget is exhausted.
+      {:error, :rate_limited} ->
+        {:ok, repository}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 

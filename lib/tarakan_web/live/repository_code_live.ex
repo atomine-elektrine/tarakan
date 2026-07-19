@@ -12,9 +12,11 @@ defmodule TarakanWeb.RepositoryCodeLive do
 
   @commit_sha_pattern ~r/^[0-9a-f]{40}$/
   @line_range_pattern ~r/^([1-9][0-9]{0,8})(?:-([1-9][0-9]{0,8}))?$/
-  @browse_limit 120
+  # Code browsing is mirror/git-backed; do not IP-throttle navigation.
+  # (Abuse on GitHub REST is avoided by git-first fetches, not by blocking the UI.)
+  @browse_limit 10_000
   @browse_window_seconds 60
-  @mount_limit 180
+  @mount_limit 10_000
   @mount_window_seconds 60
   @unlimited_roles ~w(admin moderator)
   @max_rendered_lines 10_000
