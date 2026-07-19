@@ -339,7 +339,7 @@ defmodule Tarakan.RepositoryCodeTest do
     assert {:ok, 1_001} = Cache.get({:bounded_cache_test, 1_001})
   end
 
-  test "an exhausted repository limit blocks further upstream for that repo", %{
+  test "upstream preflight no longer rate-limits code resolution", %{
     repository: repository
   } do
     use_instrumented_client()
@@ -347,19 +347,18 @@ defmodule Tarakan.RepositoryCodeTest do
     previous = Application.fetch_env!(:tarakan, RepositoryCode)
 
     Application.put_env(:tarakan, RepositoryCode,
-      global_upstream_limit: 100_000,
+      global_upstream_limit: 1,
       repository_upstream_limit: 1,
       upstream_window_seconds: 60
     )
 
     on_exit(fn -> Application.put_env(:tarakan, RepositoryCode, previous) end)
 
-    # Isolate shared postgres buckets left by earlier suite traffic.
     Tarakan.Repo.query!("DELETE FROM rate_limit_buckets")
 
-    # resolve_default_commit hits preflight twice (identity + branch). With a
-    # per-repo budget of 1, the second preflight is rate limited.
-    assert {:error, :rate_limited} = RepositoryCode.resolve_default_commit(repository)
+    # Code path is git-first; Tarakan-side upstream budgets must not block resolution.
+    assert {:ok, _sha} = RepositoryCode.resolve_default_commit(repository)
+    assert {:ok, _sha} = RepositoryCode.resolve_default_commit(repository)
   end
 
   defp use_instrumented_client do

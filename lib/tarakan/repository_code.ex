@@ -12,7 +12,6 @@ defmodule Tarakan.RepositoryCode do
   alias Tarakan.Git.Local
   alias Tarakan.GitHub
   alias Tarakan.HostedRepositories.Storage
-  alias Tarakan.RateLimiter
   alias Tarakan.Repo
   alias Tarakan.Repositories
   alias Tarakan.Repositories.Repository
@@ -566,13 +565,18 @@ defmodule Tarakan.RepositoryCode do
 
   defp rest_fallback(repository, fun) when is_function(fun, 0) do
     if rest_fallback_enabled?() do
-      with :ok <- upstream_preflight(repository),
-           result <- fun.() do
-        case verify_public_identity(repository, force: true) do
-          {:ok, _} -> result
-          # Do not turn GitHub API quota into a code-browser hard failure.
-          {:error, :rate_limited} -> result
-          {:error, reason} -> {:error, reason}
+      with :ok <- upstream_preflight(repository) do
+        case fun.() do
+          {:error, :rate_limited} ->
+            # Prefer a neutral unavailable over "code browser is busy".
+            {:error, :unavailable}
+
+          result ->
+            case verify_public_identity(repository, force: true) do
+              {:ok, _} -> result
+              {:error, :rate_limited} -> result
+              {:error, reason} -> {:error, reason}
+            end
         end
       end
     else
@@ -780,42 +784,10 @@ defmodule Tarakan.RepositoryCode do
     {:error, :identity_changed}
   end
 
-  defp upstream_preflight(%Repository{id: repository_id}) do
-    if Process.get(:tarakan_skip_code_rate_limit) do
-      :ok
-    else
-      limits =
-        Application.get_env(:tarakan, __MODULE__,
-          global_upstream_limit: 480,
-          repository_upstream_limit: 120,
-          upstream_window_seconds: 60
-        )
-
-      window = Keyword.fetch!(limits, :upstream_window_seconds)
-
-      with :ok <-
-             rate_check(
-               {:repository_code_upstream_repository, repository_id},
-               Keyword.fetch!(limits, :repository_upstream_limit),
-               window
-             ),
-           :ok <-
-             rate_check(
-               {:repository_code_upstream_global, node()},
-               Keyword.fetch!(limits, :global_upstream_limit),
-               window
-             ) do
-        :ok
-      end
-    end
-  end
-
-  defp rate_check(key, limit, period) do
-    case RateLimiter.check(key, limit, period) do
-      :ok -> :ok
-      {:error, _reason, _retry_after} -> {:error, :rate_limited}
-    end
-  end
+  # Git-first code path: do not gate object reads on Tarakan-side upstream
+  # budgets. GitHub REST 429 is handled by soft-failing identity and falling
+  # through to git mirrors; blocking the UI as "busy" was the wrong signal.
+  defp upstream_preflight(%Repository{}), do: :ok
 
   defp with_rate_limit_opts(opts, fun) when is_list(opts) and is_function(fun, 0) do
     previous = Process.get(:tarakan_skip_code_rate_limit)

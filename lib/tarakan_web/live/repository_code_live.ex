@@ -1,7 +1,6 @@
 defmodule TarakanWeb.RepositoryCodeLive do
   use TarakanWeb, :live_view
 
-  alias Tarakan.RateLimiter
   alias Tarakan.Repositories
   alias Tarakan.Repositories.Repository
   alias Tarakan.RepositoryCode
@@ -12,13 +11,6 @@ defmodule TarakanWeb.RepositoryCodeLive do
 
   @commit_sha_pattern ~r/^[0-9a-f]{40}$/
   @line_range_pattern ~r/^([1-9][0-9]{0,8})(?:-([1-9][0-9]{0,8}))?$/
-  # Code browsing is mirror/git-backed; do not IP-throttle navigation.
-  # (Abuse on GitHub REST is avoided by git-first fetches, not by blocking the UI.)
-  @browse_limit 10_000
-  @browse_window_seconds 60
-  @mount_limit 10_000
-  @mount_window_seconds 60
-  @unlimited_roles ~w(admin moderator)
   @max_rendered_lines 10_000
   @max_selected_line 1_000_000
   @max_selected_span 1_000
@@ -28,54 +20,48 @@ defmodule TarakanWeb.RepositoryCodeLive do
     {action, params} = normalize_route_params(socket.assigns.live_action, params)
     socket = assign(socket, :live_action, action)
 
-    with :ok <- allow_mount?(socket),
-         {:ok, source} <- source_from_params(action, params, socket) do
-      repository = source.repository
+    case source_from_params(action, params, socket) do
+      {:ok, source} ->
+        repository = source.repository
 
-      if connected?(socket) do
-        Repositories.subscribe()
-        Scans.subscribe(repository.id)
-      end
+        if connected?(socket) do
+          Repositories.subscribe()
+          Scans.subscribe(repository.id)
+        end
 
-      {:ok,
-       socket
-       |> assign(:page_title, "Code · #{repository.owner}/#{repository.name}")
-       |> assign(:repository, repository)
-       |> assign(:clone_urls, RepositoryPaths.clone_urls(repository))
-       |> assign(:finding, source.finding)
-       |> assign(:finding_ref, source.finding && source.finding.public_id)
-       |> assign(:source_commit_sha, source.commit_sha)
-       |> assign(:source_path, source.path)
-       |> assign(:source_line_range, source.line_range)
-       |> assign(:commit_sha, nil)
-       |> assign(:path, "")
-       |> assign(:path_segments, [])
-       |> assign(:line_range, nil)
-       |> assign(:line_range_invalid?, false)
-       |> assign(:view_state, :loading)
-       |> assign(:browser_kind, nil)
-       |> assign(:tree, nil)
-       |> assign(:file, nil)
-       |> assign(:entry_count, 0)
-       |> assign(:visible_finding_count, 0)
-       |> assign(:line_count, 0)
-       |> assign(:line_range_outside_file?, false)
-       |> assign(:suspicious_controls?, false)
-       |> assign(:error_kind, nil)
-       |> assign(:request_id, nil)
-       |> assign(:branch_options, [])
-       |> assign(:selected_branch, repository.default_branch)
-       |> maybe_load_branch_options(action)
-       |> stream_configure(:entries, dom_id: &entry_dom_id/1)
-       |> stream_configure(:lines, dom_id: &line_dom_id/1)
-       |> stream(:entries, [])
-       |> stream(:lines, [])}
-    else
-      {:error, :rate_limited} ->
         {:ok,
          socket
-         |> put_flash(:error, "Too many source-browser requests. Try again shortly.")
-         |> redirect(to: ~p"/")}
+         |> assign(:page_title, "Code · #{repository.owner}/#{repository.name}")
+         |> assign(:repository, repository)
+         |> assign(:clone_urls, RepositoryPaths.clone_urls(repository))
+         |> assign(:finding, source.finding)
+         |> assign(:finding_ref, source.finding && source.finding.public_id)
+         |> assign(:source_commit_sha, source.commit_sha)
+         |> assign(:source_path, source.path)
+         |> assign(:source_line_range, source.line_range)
+         |> assign(:commit_sha, nil)
+         |> assign(:path, "")
+         |> assign(:path_segments, [])
+         |> assign(:line_range, nil)
+         |> assign(:line_range_invalid?, false)
+         |> assign(:view_state, :loading)
+         |> assign(:browser_kind, nil)
+         |> assign(:tree, nil)
+         |> assign(:file, nil)
+         |> assign(:entry_count, 0)
+         |> assign(:visible_finding_count, 0)
+         |> assign(:line_count, 0)
+         |> assign(:line_range_outside_file?, false)
+         |> assign(:suspicious_controls?, false)
+         |> assign(:error_kind, nil)
+         |> assign(:request_id, nil)
+         |> assign(:branch_options, [])
+         |> assign(:selected_branch, repository.default_branch)
+         |> maybe_load_branch_options(action)
+         |> stream_configure(:entries, dom_id: &entry_dom_id/1)
+         |> stream_configure(:lines, dom_id: &line_dom_id/1)
+         |> stream(:entries, [])
+         |> stream(:lines, [])}
 
       {:error, :not_found} ->
         raise Ecto.NoResultsError, queryable: Repository
@@ -330,18 +316,13 @@ defmodule TarakanWeb.RepositoryCodeLive do
       repository = socket.assigns.repository
       commit_sha = socket.assigns.commit_sha
       path = socket.assigns.path
-      client_ip = socket.assigns.client_ip
-      skip_rate_limit = unlimited_scope?(socket.assigns.current_scope)
+      # Always skip Tarakan-side code budgets; objects come from git mirrors.
+      skip_rate_limit = true
 
       socket
       |> cancel_async(:browse)
       |> start_async(:browse, fn ->
-        result =
-          with :ok <- allow_browse?(client_ip, skip_rate_limit) do
-            run_request(request_kind, repository, commit_sha, path, skip_rate_limit)
-          end
-
-        {request_id, result}
+        {request_id, run_request(request_kind, repository, commit_sha, path, skip_rate_limit)}
       end)
     else
       socket
@@ -359,12 +340,17 @@ defmodule TarakanWeb.RepositoryCodeLive do
       {:ok, result}
     else
       false -> {:error, :not_found}
+      # Never show the old "busy network" page for GitHub REST quota.
+      {:error, :rate_limited} -> {:error, :unavailable}
       {:error, reason} -> {:error, reason}
     end
   end
 
   defp run_request(:browse_finding, repository, commit_sha, path, skip_rate_limit) do
-    RepositoryCode.browse(repository, commit_sha, path, code_opts(skip_rate_limit))
+    case RepositoryCode.browse(repository, commit_sha, path, code_opts(skip_rate_limit)) do
+      {:error, :rate_limited} -> {:error, :unavailable}
+      other -> other
+    end
   end
 
   defp run_request(:resolve_entry, repository, _commit_sha, _path, skip_rate_limit) do
@@ -373,47 +359,14 @@ defmodule TarakanWeb.RepositoryCodeLive do
     with {:ok, commit_sha} <- RepositoryCode.resolve_default_commit(repository, opts),
          {:ok, result} <- RepositoryCode.browse(repository, commit_sha, "", opts) do
       {:ok, result}
+    else
+      {:error, :rate_limited} -> {:error, :unavailable}
+      {:error, reason} -> {:error, reason}
     end
   end
 
   defp code_opts(true), do: [skip_rate_limit: true]
   defp code_opts(false), do: []
-
-  defp unlimited_scope?(%{platform_role: role}) when role in @unlimited_roles, do: true
-
-  defp unlimited_scope?(%{account: %{platform_role: role}}) when role in @unlimited_roles,
-    do: true
-
-  defp unlimited_scope?(_), do: false
-
-  defp allow_browse?(_client_ip, true), do: :ok
-
-  defp allow_browse?(client_ip, false) do
-    case RateLimiter.check(
-           {:repository_code_browse, client_ip},
-           @browse_limit,
-           @browse_window_seconds
-         ) do
-      :ok -> :ok
-      {:error, :rate_limited, _retry_after} -> {:error, :rate_limited}
-      {:error, _reason, _retry_after} -> {:error, :unavailable}
-    end
-  end
-
-  defp allow_mount?(socket) do
-    if unlimited_scope?(socket.assigns.current_scope) do
-      :ok
-    else
-      case RateLimiter.check(
-             {:repository_code_mount, socket.assigns.client_ip},
-             @mount_limit,
-             @mount_window_seconds
-           ) do
-        :ok -> :ok
-        {:error, _reason, _retry_after} -> {:error, :rate_limited}
-      end
-    end
-  end
 
   defp apply_browse_result(socket, {:ok, %Tree{truncated: true}}) do
     assign_error(socket, :tree_truncated)
@@ -768,7 +721,7 @@ defmodule TarakanWeb.RepositoryCodeLive do
   defp error_title(:tree_truncated), do: "Incomplete directory"
   defp error_title(:unsupported_entry), do: "Unsupported source entry"
   defp error_title(:empty_repository), do: "Empty repository"
-  defp error_title(:rate_limited), do: "Code browser is busy"
+  defp error_title(:rate_limited), do: "Code unavailable"
   defp error_title(:identity_changed), do: "Repository identity changed"
   defp error_title(:commit_mismatch), do: "Commit verification failed"
   defp error_title(_error), do: "Code unavailable"
@@ -797,7 +750,7 @@ defmodule TarakanWeb.RepositoryCodeLive do
     do: "Nothing has been pushed to this repository yet. Push a branch and it will appear here."
 
   defp error_message(:rate_limited),
-    do: "Too many code requests arrived from this network. Wait a moment and retry."
+    do: "The source host could not serve this code safely. Try again shortly."
 
   defp error_message(reason) when reason in [:identity_changed, :commit_mismatch],
     do: "Tarakan could not verify this source against the registered public repository."
