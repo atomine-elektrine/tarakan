@@ -110,54 +110,177 @@
       </div>
     </section>
 
-    <section id="profile-activity" class="mt-8">
-      <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
-        Recent public contributions
-      </h2>
+    <div class="mt-10 grid gap-10 lg:grid-cols-2">
+      <section id="profile-repositories">
+        <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
+          Repositories added
+        </h2>
+        <p class="mt-1 font-mono text-[11px] text-ink-faint">
+          Publicly listed repositories this contributor registered.
+        </p>
 
-      <p
-        :if={@activity == []}
-        id="profile-no-activity"
-        class="mt-4 font-mono text-xs text-ink-faint"
-      >
-        No public contributions yet.
-      </p>
+        <p
+          :if={@repositories == []}
+          id="profile-no-repositories"
+          class="mt-4 font-mono text-xs text-ink-faint"
+        >
+          No listed repositories yet.
+        </p>
 
-      <ul :if={@activity != []} class="mt-4 divide-y divide-rule border-t border-rule">
-        <li :for={entry <- @activity}>
-          <.link
-            navigate={TarakanWeb.RepositoryPaths.repository_security_path(entry.repository)}
-            class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
-          >
-            <span class="shrink-0 tabular-nums text-ink-faint">{activity_time(entry.at)}</span>
-            <span
-              :if={entry.kind == :review}
-              class="min-w-0 truncate text-ink-muted transition group-hover:text-ink"
+        <ul
+          :if={@repositories != []}
+          class="mt-4 divide-y divide-rule border-t border-rule"
+        >
+          <li :for={repository <- @repositories} id={"profile-repo-#{repository.id}"}>
+            <.link
+              navigate={TarakanWeb.RepositoryPaths.repository_path(repository)}
+              class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
             >
-              <span class="text-ink-faint">reviewed</span>
-              {entry.repository.owner}/{entry.repository.name}
-            </span>
-            <span
-              :if={entry.kind == :verdict}
-              class="min-w-0 truncate text-ink-muted transition group-hover:text-ink"
-            >
-              <span class={[
-                entry.verdict == "confirmed" && "text-quote",
-                entry.verdict == "disputed" && "text-signal"
-              ]}>{entry.verdict}</span>
-              a review of {entry.repository.owner}/{entry.repository.name}
-            </span>
-            <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
-              <span :if={entry.kind == :review and entry.verified} class="text-ink-muted">verified · </span>
-              <span :if={entry.kind == :review and entry.findings_count > 0} class="text-signal">
-                {entry.findings_count} findings
+              <span class="shrink-0 tabular-nums text-ink-faint">
+                {activity_time(repository.inserted_at)}
               </span>
-              <span :if={entry.kind == :review and entry.findings_count == 0}>no findings</span>
-              <span :if={entry.kind == :verdict}>{provenance_label(entry.provenance)}</span>
-            </span>
-          </.link>
-        </li>
-      </ul>
-    </section>
+              <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
+                <span class="text-ink-faint">{repository.host}/</span>{repository.owner}/{repository.name}
+              </span>
+              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+                <span :if={repository.primary_language}>{repository.primary_language}</span>
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </section>
+
+      <section id="profile-reviews">
+        <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
+          Reports submitted
+        </h2>
+        <p class="mt-1 font-mono text-[11px] text-ink-faint">
+          Security reviews pinned to exact commits.
+        </p>
+
+        <p
+          :if={@reviews == []}
+          id="profile-no-reviews"
+          class="mt-4 font-mono text-xs text-ink-faint"
+        >
+          No public reports yet.
+        </p>
+
+        <ul :if={@reviews != []} class="mt-4 divide-y divide-rule border-t border-rule">
+          <li :for={entry <- @reviews} id={"profile-review-#{entry.id}"}>
+            <.link
+              navigate={TarakanWeb.RepositoryPaths.repository_security_path(entry.repository)}
+              class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
+            >
+              <span class="shrink-0 tabular-nums text-ink-faint">{activity_time(entry.at)}</span>
+              <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
+                <span class="text-ink-faint">reviewed</span>
+                {entry.repository.owner}/{entry.repository.name}
+                <span :if={entry.commit_sha} class="text-ink-faint">
+                  · {short_sha(entry.commit_sha)}
+                </span>
+              </span>
+              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+                <span :if={entry.verified} class="text-ink-muted">verified · </span>
+                <span :if={entry.findings_count > 0} class="text-signal">
+                  {entry.findings_count} findings
+                </span>
+                <span :if={entry.findings_count == 0}>no findings</span>
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </section>
+
+      <section id="profile-findings">
+        <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
+          Findings filed
+        </h2>
+        <p class="mt-1 font-mono text-[11px] text-ink-faint">
+          Individual findings from public reports.
+        </p>
+
+        <p
+          :if={@findings == []}
+          id="profile-no-findings"
+          class="mt-4 font-mono text-xs text-ink-faint"
+        >
+          No public findings yet.
+        </p>
+
+        <ul :if={@findings != []} class="mt-4 divide-y divide-rule border-t border-rule">
+          <li :for={entry <- @findings} id={"profile-finding-#{entry.public_id}"}>
+            <.link
+              navigate={~p"/findings/#{entry.public_id}"}
+              class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
+            >
+              <span class="shrink-0 tabular-nums text-ink-faint">{activity_time(entry.at)}</span>
+              <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
+                <span class={[
+                  "mr-1.5 inline-block border px-1 text-[10px] uppercase tracking-[0.08em]",
+                  entry.severity in ~w(critical high) && "border-signal text-signal",
+                  entry.severity not in ~w(critical high) && "border-rule text-ink-faint"
+                ]}>
+                  {entry.severity}
+                </span>
+                {entry.title}
+              </span>
+              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+                {entry.repository.owner}/{entry.repository.name}
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </section>
+
+      <section id="profile-checks">
+        <h2 class="font-display text-lg uppercase tracking-[0.08em] text-ink">
+          Checks cast
+        </h2>
+        <p class="mt-1 font-mono text-[11px] text-ink-faint">
+          Independent confirmations, disputes, and fix notes.
+        </p>
+
+        <p
+          :if={@checks == []}
+          id="profile-no-checks"
+          class="mt-4 font-mono text-xs text-ink-faint"
+        >
+          No public checks yet.
+        </p>
+
+        <ul :if={@checks != []} class="mt-4 divide-y divide-rule border-t border-rule">
+          <li :for={entry <- @checks} id={"profile-check-#{entry.id}"}>
+            <.link
+              :if={entry.public_id || entry.repository}
+              navigate={check_path(entry)}
+              class="group flex items-baseline gap-x-3 px-3 py-3 font-mono text-xs transition-colors hover:bg-panel"
+            >
+              <span class="shrink-0 tabular-nums text-ink-faint">{activity_time(entry.at)}</span>
+              <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
+                <span class={[
+                  entry.verdict == "confirmed" && "text-quote",
+                  entry.verdict == "disputed" && "text-signal",
+                  entry.verdict == "fixed" && "text-ink"
+                ]}>
+                  {entry.verdict}
+                </span>
+                <span :if={entry.title} class="text-ink-faint"> · </span>
+                <span :if={entry.title}>{entry.title}</span>
+                <span
+                  :if={is_nil(entry.title) and entry.repository}
+                  class="text-ink-faint"
+                >
+                  on {entry.repository.owner}/{entry.repository.name}
+                </span>
+              </span>
+              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+                {provenance_label(entry.provenance)}
+              </span>
+            </.link>
+          </li>
+        </ul>
+      </section>
+    </div>
   </Layouts.page>
 </Layouts.app>

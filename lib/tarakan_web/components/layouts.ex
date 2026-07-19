@@ -207,7 +207,7 @@ defmodule TarakanWeb.Layouts do
                     navigate={"/" <> @current_scope.account.handle}
                     class="block px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-muted transition hover:bg-panel hover:text-ink"
                   >
-                    Your profile
+                    Your contributions
                   </.link>
                   <.link
                     navigate={~p"/accounts/settings"}
@@ -388,7 +388,7 @@ defmodule TarakanWeb.Layouts do
                       navigate={"/" <> @current_scope.account.handle}
                       class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted transition hover:bg-panel hover:text-ink"
                     >
-                      Your profile
+                      Your contributions
                     </.link>
                     <.link
                       navigate={~p"/accounts/settings"}

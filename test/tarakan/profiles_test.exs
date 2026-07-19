@@ -79,4 +79,32 @@ defmodule Tarakan.ProfilesTest do
     assert review.kind == :review
     assert review.repository.id == repository.id
   end
+
+  test "list helpers surface repositories, reviews, findings, and checks" do
+    submitter = github_account_fixture()
+    repository = listed_github_repository_fixture(submitter)
+    scan = scan_fixture(repository, submitter, %{"findings_json" => findings_json_fixture(2)})
+    verifier = reviewer_account_fixture()
+    confirmation_fixture(scan, verifier)
+
+    repos = Profiles.list_repositories(submitter)
+    assert length(repos) == 1
+    assert hd(repos).id == repository.id
+
+    reviews = Profiles.list_reviews(submitter)
+    assert length(reviews) == 1
+    assert hd(reviews).id == scan.id
+    assert hd(reviews).findings_count == 2
+    assert hd(reviews).commit_sha == scan.commit_sha
+
+    findings = Profiles.list_findings(submitter)
+    assert length(findings) == 2
+    assert Enum.all?(findings, &is_binary(&1.public_id))
+    assert Enum.all?(findings, &(&1.repository.id == repository.id))
+
+    checks = Profiles.list_checks(verifier)
+    assert length(checks) == 2
+    assert Enum.all?(checks, &(&1.verdict == "confirmed"))
+    assert Enum.all?(checks, &(&1.repository.id == repository.id))
+  end
 end
