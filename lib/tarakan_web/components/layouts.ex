@@ -456,7 +456,7 @@ defmodule TarakanWeb.Layouts do
               <.logo_mark class="size-5" /> Tarakan
             </p>
             <p class="mt-3 max-w-xs text-sm leading-6 text-ink-muted">
-              Public security record for open source.
+              Public disclosure by default.
             </p>
           </div>
 

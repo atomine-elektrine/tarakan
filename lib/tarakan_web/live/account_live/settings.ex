@@ -250,12 +250,14 @@ defmodule TarakanWeb.AccountLive.Settings do
                   <p class="font-semibold text-ink">Repository discovery</p>
                   <dl class="mt-2 grid gap-x-3 gap-y-1 font-mono text-[11px] sm:grid-cols-[4rem_1fr]">
                     <dt class="text-ink">GET</dt><dd>/repositories</dd>
+                    <dt class="text-ink">POST</dt><dd>/repositories</dd>
                   </dl>
                   <p class="mt-2">
-                    Optional query parameters:
-                    <code class="font-mono text-ink">status=unscanned</code>
+                    List with <code class="font-mono text-ink">status=unscanned</code>
                     and <code class="font-mono text-ink">limit=100</code>.
-                    Requires <code class="font-mono text-ink">repositories:read</code>.
+                    Register with
+                    <code class="font-mono text-ink">&#123;&quot;url&quot;:&quot;owner/name&quot;&#125;</code>
+                    (scopes: findings:submit or reviews:submit).
                   </p>
                 </div>
 

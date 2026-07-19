@@ -83,6 +83,7 @@ defmodule TarakanWeb.Router do
     pipe_through [:api, :api_authenticated]
 
     get "/repositories", RepositoryController, :index
+    post "/repositories", RepositoryController, :create
     delete "/client-auth/session", ClientAuthController, :revoke
 
     # Jobs

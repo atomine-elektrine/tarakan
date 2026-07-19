@@ -58,8 +58,9 @@ defmodule Tarakan.Policy do
   @credential_grants %{
     clone_repository: ~w(repo:read repo:write),
     push_repository: ~w(repo:write),
-    register_repository: ~w(repositories:write),
-    manage_repository: ~w(repositories:write),
+    # Scanner credentials may register public GitHub repos for the review queue.
+    register_repository: ~w(repositories:write findings:submit reviews:submit repo:write),
+    manage_repository: ~w(repositories:write repo:write),
     manage_repository_memberships: ~w(repositories:memberships),
     propose_repository_membership: ~w(repositories:memberships),
     verify_repository_membership: ~w(repositories:memberships),
