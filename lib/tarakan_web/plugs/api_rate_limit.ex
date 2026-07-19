@@ -1,6 +1,9 @@
 defmodule TarakanWeb.Plugs.ApiRateLimit do
   @moduledoc """
   Applies independent IP, account, token, and mutation limits to API traffic.
+
+  Platform admins and moderators are not rate-limited (mass registration /
+  operational tooling).
   """
 
   import Plug.Conn
@@ -9,6 +12,7 @@ defmodule TarakanWeb.Plugs.ApiRateLimit do
   alias Tarakan.RateLimiter
 
   @defaults [request_limit: 120, mutation_limit: 20, window_seconds: 60]
+  @unlimited_roles ~w(admin moderator)
 
   def init(opts) do
     configured = Application.get_env(:tarakan, __MODULE__, [])
@@ -17,19 +21,47 @@ defmodule TarakanWeb.Plugs.ApiRateLimit do
 
   def call(conn, opts) do
     mode = Keyword.fetch!(opts, :mode)
-    request_limit = Keyword.fetch!(opts, :request_limit)
-    mutation_limit = Keyword.fetch!(opts, :mutation_limit)
-    window_seconds = Keyword.fetch!(opts, :window_seconds)
 
-    checks =
-      case mode do
-        :ip -> [{{:api_ip, remote_ip(conn)}, request_limit}]
-        :actor -> actor_checks(conn, request_limit, mutation_limit)
-      end
+    cond do
+      # Admins/moderators (after auth) are unlimited for operational mass import.
+      unlimited_actor?(conn) ->
+        conn
 
-    case Enum.find_value(checks, &limited?(&1, window_seconds)) do
-      nil -> conn
-      retry_after -> reject(conn, retry_after)
+      # IP bucket runs before auth. Bearer traffic is constrained later by actor
+      # limits so mass admin registration is not double-throttled on IP.
+      mode == :ip and bearer_token?(conn) ->
+        conn
+
+      true ->
+        request_limit = Keyword.fetch!(opts, :request_limit)
+        mutation_limit = Keyword.fetch!(opts, :mutation_limit)
+        window_seconds = Keyword.fetch!(opts, :window_seconds)
+
+        checks =
+          case mode do
+            :ip -> [{{:api_ip, remote_ip(conn)}, request_limit}]
+            :actor -> actor_checks(conn, request_limit, mutation_limit)
+          end
+
+        case Enum.find_value(checks, &limited?(&1, window_seconds)) do
+          nil -> conn
+          retry_after -> reject(conn, retry_after)
+        end
+    end
+  end
+
+  defp unlimited_actor?(conn) do
+    case conn.assigns[:current_scope] do
+      %{platform_role: role} when role in @unlimited_roles -> true
+      %{account: %{platform_role: role}} when role in @unlimited_roles -> true
+      _ -> false
+    end
+  end
+
+  defp bearer_token?(conn) do
+    case get_req_header(conn, "authorization") do
+      ["Bearer " <> token] when byte_size(token) > 0 -> true
+      _ -> false
     end
   end
 

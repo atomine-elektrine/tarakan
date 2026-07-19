@@ -58,4 +58,31 @@ defmodule TarakanWeb.API.RepositoryControllerTest do
     assert %{"repositories" => repos} = json_response(conn, 200)
     assert Enum.any?(repos, &(&1["owner"] == "openai" and &1["name"] == "codex"))
   end
+
+  test "admin credentials are not registration rate limited", %{conn: conn} do
+    admin =
+      github_account_fixture()
+      |> then(fn account ->
+        account
+        |> Tarakan.Accounts.Account.authorization_changeset(%{
+          state: "active",
+          platform_role: "admin",
+          trust_tier: "reviewer"
+        })
+        |> Tarakan.Repo.update!()
+      end)
+
+    token = api_token(admin)
+
+    # Well above the normal mutation (20) and repository_fetch (10) windows.
+    for _ <- 1..35 do
+      conn =
+        conn
+        |> recycle()
+        |> authed(token)
+        |> post(~p"/api/repositories", %{"url" => "openai/codex"})
+
+      assert json_response(conn, 200)["repository"]["name"] == "codex"
+    end
+  end
 end

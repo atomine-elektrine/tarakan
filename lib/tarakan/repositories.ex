@@ -642,6 +642,14 @@ defmodule Tarakan.Repositories do
     )
   end
 
+  defp repository_fetch_preflight(%Scope{platform_role: role})
+       when role in ["moderator", "admin"],
+       do: :ok
+
+  defp repository_fetch_preflight(%Scope{account: %Account{platform_role: role}})
+       when role in ["moderator", "admin"],
+       do: :ok
+
   defp repository_fetch_preflight(%Scope{account_id: account_id}) do
     case Tarakan.RateLimiter.check({:repository_fetch, account_id}, 10, 60) do
       :ok -> :ok
