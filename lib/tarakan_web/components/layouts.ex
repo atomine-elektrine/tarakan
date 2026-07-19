@@ -49,9 +49,9 @@ defmodule TarakanWeb.Layouts do
       id={@id}
       class={
         [
-          "mx-auto w-full min-w-0 px-5 sm:px-8",
+          "mx-auto w-full min-w-0 px-4 sm:px-8",
           # Consistent clearance from sticky nav + bottom breathing room.
-          "pt-8 pb-10 sm:pt-10 sm:pb-12",
+          "pt-6 pb-10 sm:pt-10 sm:pb-12",
           @width == :wide && "max-w-[90rem]",
           @width == :focused && "max-w-3xl",
           @width == :compact && "max-w-xl",
@@ -90,52 +90,66 @@ defmodule TarakanWeb.Layouts do
 
   def app(assigns) do
     ~H"""
-    <div class="min-h-screen bg-ground text-ink antialiased">
-      <header class="sticky top-0 z-40 border-b-2 border-strong bg-ground">
+    <div class="min-h-dvh min-w-0 overflow-x-clip bg-ground text-ink antialiased">
+      <header class="sticky top-0 z-40 border-b-2 border-strong bg-ground pt-[env(safe-area-inset-top)]">
         <div
           aria-hidden="true"
-          class="absolute inset-x-0 -bottom-0.5 h-0.5 bg-gradient-to-r from-signal via-signal/40 to-transparent"
+          class="pointer-events-none absolute inset-x-0 -bottom-0.5 h-0.5 bg-gradient-to-r from-signal via-signal/40 to-transparent"
         >
         </div>
-        <div class="flex h-14 w-full items-stretch justify-between">
-          <div class="flex items-stretch">
+
+        <div class="flex h-14 w-full min-w-0 items-center gap-2 px-3 md:items-stretch md:gap-0 md:px-0">
+          <%!-- Brand --%>
+          <.link
+            navigate={~p"/"}
+            aria-label="Tarakan home"
+            class="flex h-9 shrink-0 items-center gap-2 md:h-auto md:border-r-2 md:border-strong md:px-8"
+          >
+            <.logo_mark class="size-5 text-signal" />
+            <span class="font-display text-[15px] font-bold uppercase tracking-[0.12em] text-ink md:text-base md:tracking-[0.14em]">
+              Tarakan
+            </span>
+          </.link>
+
+          <%!-- Desktop primary nav --%>
+          <nav
+            aria-label="Primary"
+            class="hidden min-w-0 flex-1 items-stretch md:flex"
+          >
             <.link
-              navigate={~p"/"}
-              aria-label="Tarakan home"
-              class="flex items-center gap-2.5 border-r-2 border-strong px-4 sm:px-8"
+              navigate={~p"/explore"}
+              class="inline-flex items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink"
             >
-              <.logo_mark class="size-5 text-signal" />
-              <span class="hidden font-display text-base font-bold uppercase tracking-[0.14em] text-ink sm:inline">
-                Tarakan
-              </span>
+              Explore
+            </.link>
+            <.link
+              navigate={~p"/patterns"}
+              class="inline-flex items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink"
+            >
+              Patterns
             </.link>
             <.link
               navigate={~p"/jobs"}
-              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
+              class="inline-flex items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink"
             >
               Jobs
             </.link>
             <.link
               navigate={~p"/agents"}
-              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
+              class="inline-flex items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink"
             >
               Agents
             </.link>
             <.link
-              navigate={~p"/explore"}
-              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
-            >
-              Explore
-            </.link>
-            <.link
               navigate={~p"/leaderboard"}
-              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink sm:flex"
+              class="hidden items-center border-r-2 border-rule px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-faint transition hover:bg-panel hover:text-ink lg:inline-flex"
             >
               Leaderboard
             </.link>
-          </div>
+          </nav>
 
-          <div class="flex items-stretch">
+          <%!-- Desktop utilities --%>
+          <div class="ml-auto hidden h-14 items-stretch md:flex">
             <div
               id="theme-toggle"
               class="flex items-stretch border-l-2 border-rule"
@@ -148,7 +162,7 @@ defmodule TarakanWeb.Layouts do
                 aria-pressed="false"
                 aria-label="Light theme"
                 phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "light"})}
-                class="flex w-8 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink sm:w-10"
+                class="flex w-10 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
               >
                 <.icon name="hero-sun-micro" class="size-3.5" />
               </button>
@@ -158,7 +172,7 @@ defmodule TarakanWeb.Layouts do
                 aria-pressed="false"
                 aria-label="Follow system theme"
                 phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "system"})}
-                class="flex w-8 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink sm:w-10"
+                class="flex w-10 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
               >
                 <.icon name="hero-computer-desktop-micro" class="size-3.5" />
               </button>
@@ -168,21 +182,20 @@ defmodule TarakanWeb.Layouts do
                 aria-pressed="false"
                 aria-label="Dark theme"
                 phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "dark"})}
-                class="flex w-8 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink sm:w-10"
+                class="flex w-10 cursor-pointer items-center justify-center text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
               >
                 <.icon name="hero-moon-micro" class="size-3.5" />
               </button>
             </div>
+
             <%= if @current_scope && @current_scope.account do %>
               <details
                 id="current-account"
                 class="relative flex items-stretch"
                 phx-click-away={JS.remove_attribute("open", to: "#current-account")}
               >
-                <summary class="flex cursor-pointer list-none items-center gap-1.5 border-l-2 border-rule px-3 font-mono text-xs text-ink-muted transition hover:bg-panel hover:text-ink sm:px-5 [&::-webkit-details-marker]:hidden">
-                  <span class="max-w-24 truncate sm:max-w-[24ch]">
-                    @{@current_scope.account.handle}
-                  </span>
+                <summary class="flex cursor-pointer list-none items-center gap-1.5 border-l-2 border-rule px-5 font-mono text-xs text-ink-muted transition hover:bg-panel hover:text-ink [&::-webkit-details-marker]:hidden">
+                  <span class="max-w-[16ch] truncate">@{@current_scope.account.handle}</span>
                   <.icon name="hero-chevron-down-micro" class="size-3 shrink-0 text-ink-faint" />
                 </summary>
                 <nav
@@ -224,9 +237,7 @@ defmodule TarakanWeb.Layouts do
                     :if={@current_scope.platform_role == "admin"}
                     id="header-admin-dashboard"
                     navigate={~p"/admin"}
-                    class={[
-                      "block px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-signal transition hover:bg-panel hover:text-ink"
-                    ]}
+                    class="block px-4 py-2.5 font-mono text-[11px] uppercase tracking-[0.18em] text-signal transition hover:bg-panel hover:text-ink"
                   >
                     Administration
                   </.link>
@@ -242,52 +253,238 @@ defmodule TarakanWeb.Layouts do
               <.link
                 id="header-add-repository"
                 navigate={~p"/repositories/new"}
-                class="flex items-center gap-1.5 border-l-2 border-strong bg-btn px-3 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90 sm:px-5"
+                class="inline-flex items-center gap-1.5 border-l-2 border-strong bg-btn px-5 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90"
               >
-                <.icon name="hero-plus-micro" class="size-3.5" />
-                <span class="hidden sm:inline">Add repository</span>
-                <span class="sm:hidden">Add</span>
+                <.icon name="hero-plus-micro" class="size-3.5" /> Add repository
               </.link>
             <% else %>
               <.link
                 id="header-login"
                 navigate={~p"/accounts/log-in"}
-                class="flex items-center border-l-2 border-rule px-4 font-display text-xs uppercase tracking-[0.14em] text-ink transition hover:bg-panel sm:px-5"
+                class="inline-flex items-center border-l-2 border-rule px-5 font-display text-xs uppercase tracking-[0.14em] text-ink transition hover:bg-panel"
               >
                 Sign in
               </.link>
               <.link
                 id="header-register"
                 navigate={~p"/accounts/register"}
-                class="hidden items-center border-l-2 border-strong bg-btn px-5 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90 sm:flex"
+                class="inline-flex items-center border-l-2 border-strong bg-btn px-5 font-display text-xs uppercase tracking-[0.14em] text-btn-fg transition hover:opacity-90"
               >
                 Join Tarakan
               </.link>
             <% end %>
           </div>
+
+          <%!-- Mobile: one primary action + menu --%>
+          <div class="ml-auto flex items-center gap-1.5 md:hidden">
+            <.link
+              :if={@current_scope && @current_scope.account}
+              id="header-add-repository-mobile"
+              navigate={~p"/repositories/new"}
+              class="inline-flex h-9 items-center gap-1 bg-btn px-3 font-display text-[11px] uppercase tracking-[0.12em] text-btn-fg transition hover:opacity-90"
+            >
+              <.icon name="hero-plus-micro" class="size-3.5" /> Add
+            </.link>
+            <.link
+              :if={is_nil(@current_scope) || is_nil(@current_scope.account)}
+              id="header-login-mobile"
+              navigate={~p"/accounts/log-in"}
+              class="inline-flex h-9 items-center border-2 border-strong px-3 font-display text-[11px] uppercase tracking-[0.12em] text-ink transition hover:bg-panel"
+            >
+              Sign in
+            </.link>
+
+            <details
+              id="site-nav-mobile"
+              class="relative"
+              phx-click-away={JS.remove_attribute("open", to: "#site-nav-mobile")}
+            >
+              <summary
+                class="flex h-9 w-9 cursor-pointer list-none items-center justify-center border-2 border-strong text-ink transition hover:bg-panel [&::-webkit-details-marker]:hidden"
+                aria-label="Open menu"
+              >
+                <.icon name="hero-bars-3-mini" class="size-5" />
+              </summary>
+
+              <div class="absolute right-0 top-[calc(100%+0.4rem)] z-50 w-[min(18.5rem,calc(100vw-1.5rem))] border-2 border-strong bg-ground shadow-2xl">
+                <nav aria-label="Site" class="divide-y divide-rule">
+                  <.link
+                    navigate={~p"/explore"}
+                    class="block px-4 py-3.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+                  >
+                    Explore
+                  </.link>
+                  <.link
+                    navigate={~p"/patterns"}
+                    class="block px-4 py-3.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+                  >
+                    Patterns
+                  </.link>
+                  <.link
+                    navigate={~p"/jobs"}
+                    class="block px-4 py-3.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+                  >
+                    Jobs
+                  </.link>
+                  <.link
+                    navigate={~p"/agents"}
+                    class="block px-4 py-3.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+                  >
+                    Agents
+                  </.link>
+                  <.link
+                    navigate={~p"/leaderboard"}
+                    class="block px-4 py-3.5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink transition hover:bg-panel"
+                  >
+                    Leaderboard
+                  </.link>
+                </nav>
+
+                <div
+                  id="theme-toggle-mobile"
+                  class="flex border-t-2 border-strong"
+                  role="group"
+                  aria-label="Color theme"
+                >
+                  <button
+                    type="button"
+                    data-theme-option="light"
+                    aria-pressed="false"
+                    aria-label="Light theme"
+                    phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "light"})}
+                    class="flex h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
+                  >
+                    <.icon name="hero-sun-micro" class="size-3.5" /> Light
+                  </button>
+                  <button
+                    type="button"
+                    data-theme-option="system"
+                    aria-pressed="false"
+                    aria-label="Follow system theme"
+                    phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "system"})}
+                    class="flex h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 border-x border-rule font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
+                  >
+                    <.icon name="hero-computer-desktop-micro" class="size-3.5" /> Auto
+                  </button>
+                  <button
+                    type="button"
+                    data-theme-option="dark"
+                    aria-pressed="false"
+                    aria-label="Dark theme"
+                    phx-click={JS.dispatch("tarakan:set-theme", detail: %{theme: "dark"})}
+                    class="flex h-11 flex-1 cursor-pointer items-center justify-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint transition hover:bg-panel hover:text-ink aria-pressed:bg-panel aria-pressed:text-ink"
+                  >
+                    <.icon name="hero-moon-micro" class="size-3.5" /> Dark
+                  </button>
+                </div>
+
+                <div class="border-t-2 border-strong">
+                  <%= if @current_scope && @current_scope.account do %>
+                    <p class="px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                      @{@current_scope.account.handle}
+                    </p>
+                    <.link
+                      id="header-profile-mobile"
+                      navigate={"/" <> @current_scope.account.handle}
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted transition hover:bg-panel hover:text-ink"
+                    >
+                      Your profile
+                    </.link>
+                    <.link
+                      navigate={~p"/accounts/settings"}
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted transition hover:bg-panel hover:text-ink"
+                    >
+                      Settings
+                    </.link>
+                    <.link
+                      id="header-report-content-mobile"
+                      navigate={~p"/moderation/report"}
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted transition hover:bg-panel hover:text-ink"
+                    >
+                      Report content
+                    </.link>
+                    <.link
+                      :if={
+                        @current_scope.account_state == "active" &&
+                          @current_scope.platform_role in ["moderator", "admin"]
+                      }
+                      id="header-moderation-queue-mobile"
+                      navigate={~p"/moderation/queue"}
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-muted transition hover:bg-panel hover:text-ink"
+                    >
+                      Moderation queue
+                    </.link>
+                    <.link
+                      :if={@current_scope.platform_role == "admin"}
+                      id="header-admin-dashboard-mobile"
+                      navigate={~p"/admin"}
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-signal transition hover:bg-panel hover:text-ink"
+                    >
+                      Administration
+                    </.link>
+                    <.link
+                      href={~p"/accounts/log-out"}
+                      method="delete"
+                      class="block px-4 py-3 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint transition hover:bg-panel hover:text-signal"
+                    >
+                      Sign out
+                    </.link>
+                  <% else %>
+                    <.link
+                      id="header-register-mobile"
+                      navigate={~p"/accounts/register"}
+                      class="block bg-btn px-4 py-3.5 text-center font-mono text-[11px] uppercase tracking-[0.16em] text-btn-fg transition hover:opacity-90"
+                    >
+                      Join Tarakan
+                    </.link>
+                  <% end %>
+                </div>
+              </div>
+            </details>
+          </div>
         </div>
       </header>
 
-      <main>
+      <main class="min-w-0">
         {render_slot(@inner_block)}
       </main>
 
-      <footer class="relative overflow-hidden border-t-2 border-strong">
-        <div class="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-5 py-10 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
+      <footer class="relative overflow-hidden border-t-2 border-strong pb-[env(safe-area-inset-bottom)]">
+        <div class="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-10 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p class="flex items-center gap-2.5 font-display text-base font-bold uppercase tracking-[0.08em] text-ink">
               <.logo_mark class="size-5" /> Tarakan
             </p>
             <p class="mt-3 max-w-xs text-sm leading-6 text-ink-muted">
-              The public security record for open source.
+              Public security record for open source.
             </p>
           </div>
 
           <nav aria-label="Footer" class="text-sm">
-            <ul class="flex flex-wrap gap-x-6 gap-y-2">
+            <ul class="flex flex-wrap gap-x-5 gap-y-2.5">
               <li>
                 <.link navigate={~p"/"} class="text-ink-muted transition hover:text-ink">
                   Registry
+                </.link>
+              </li>
+              <li>
+                <.link navigate={~p"/jobs"} class="text-ink-muted transition hover:text-ink">
+                  Jobs
+                </.link>
+              </li>
+              <li>
+                <.link navigate={~p"/agents"} class="text-ink-muted transition hover:text-ink">
+                  Agents
+                </.link>
+              </li>
+              <li>
+                <.link navigate={~p"/explore"} class="text-ink-muted transition hover:text-ink">
+                  Explore
+                </.link>
+              </li>
+              <li>
+                <.link navigate={~p"/leaderboard"} class="text-ink-muted transition hover:text-ink">
+                  Leaderboard
                 </.link>
               </li>
               <%= if @current_scope && @current_scope.account do %>

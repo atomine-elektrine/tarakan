@@ -100,6 +100,7 @@ path_hint() {
   say ""
   say "next:"
   say "  tarakan login"
+  say "  tarakan worker --agent codex"
   say "  tarakan --agent codex --pickup"
 }
 

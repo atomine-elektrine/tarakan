@@ -37,11 +37,13 @@ defmodule Tarakan.Repositories do
   registry-level dashboards can refresh their aggregates.
   """
   def broadcast_record_updated(%Repository{} = repository) do
+    invalidate_registry_stats()
     broadcast({:repository_record_updated, repository})
   end
 
   @doc "Broadcasts the first transition of a repository into the public registry."
   def broadcast_registration(%Repository{listing_status: "listed"} = repository) do
+    invalidate_registry_stats()
     broadcast({:repository_registered, repository})
   end
 
@@ -93,12 +95,54 @@ defmodule Tarakan.Repositories do
     String.replace(term, ["\\", "%", "_"], fn char -> "\\" <> char end)
   end
 
-  @doc "Lists every publicly listed repository, for search-engine discovery."
+  @doc "Cursor page of listed repositories (id ascending)."
+  def list_listed_repositories_page(opts \\ []) do
+    limit = opts |> Keyword.get(:limit, 1_000) |> max(1) |> min(5_000)
+    after_id = Keyword.get(opts, :after_id, 0)
+
+    repos =
+      Repository
+      |> where(
+        [repository],
+        repository.listing_status == "listed" and repository.id > ^after_id
+      )
+      |> order_by([repository], asc: repository.id)
+      |> limit(^limit)
+      |> Repo.all()
+
+    next_after_id =
+      case List.last(repos) do
+        %Repository{id: id} -> id
+        _ -> nil
+      end
+
+    %{repositories: repos, next_after_id: next_after_id}
+  end
+
+  @doc "Lazy stream of listed repositories for SEO/export."
+  def stream_listed_repositories(opts \\ []) do
+    Stream.resource(
+      fn -> 0 end,
+      fn
+        nil ->
+          {:halt, nil}
+
+        after_id ->
+          %{repositories: repos, next_after_id: next} =
+            list_listed_repositories_page(Keyword.merge(opts, after_id: after_id))
+
+          case repos do
+            [] -> {:halt, nil}
+            _ -> {repos, next}
+          end
+      end,
+      fn _ -> :ok end
+    )
+  end
+
+  @doc false
   def list_listed_repositories do
-    Repository
-    |> where([repository], repository.listing_status == "listed")
-    |> order_by([repository], asc: repository.id)
-    |> Repo.all()
+    stream_listed_repositories() |> Enum.to_list()
   end
 
   @doc """
@@ -148,22 +192,6 @@ defmodule Tarakan.Repositories do
     |> Repo.all()
   end
 
-  @doc "Lists relationship records for a repository."
-  def list_repository_memberships(%Repository{id: repository_id}) do
-    RepositoryMembership
-    |> where([membership], membership.repository_id == ^repository_id)
-    |> order_by([membership], asc: membership.inserted_at)
-    |> preload([:account, :verified_by_account])
-    |> Repo.all()
-  end
-
-  def get_repository_membership(%Repository{id: repository_id}, %Account{id: account_id}) do
-    Repo.get_by(RepositoryMembership, repository_id: repository_id, account_id: account_id)
-  end
-
-  def get_repository_membership!(id),
-    do: RepositoryMembership |> Repo.get!(id) |> Repo.preload([:repository, :account])
-
   @doc """
   Proposes a repository relationship. The relationship grants no authority
   until a steward or moderator verifies it.
@@ -211,34 +239,6 @@ defmodule Tarakan.Repositories do
           error -> error
         end
     end)
-  end
-
-  @doc "Changes the role on a repository membership."
-  def update_repository_membership(
-        %Scope{} = scope,
-        %RepositoryMembership{} = membership,
-        attrs
-      ) do
-    transact_membership_authorized(scope, membership.id, fn fresh_scope, canonical_membership ->
-      with :ok <-
-             Policy.authorize(
-               fresh_scope,
-               :manage_repository_memberships,
-               canonical_membership
-             ),
-           {:ok, updated} <-
-             canonical_membership
-             |> RepositoryMembership.changeset(attrs)
-             |> Repo.update() do
-        audit!(fresh_scope, :repository_membership_updated, updated, %{
-          from_state: canonical_membership.role,
-          to_state: updated.role
-        })
-
-        {:ok, updated}
-      end
-    end)
-    |> notify_membership_authorization_change()
   end
 
   @doc "Verifies, revokes, or returns a relationship to pending review."
@@ -297,29 +297,81 @@ defmodule Tarakan.Repositories do
   @doc "Changes whether a repository is pending, globally listed, or quarantined."
   def update_listing_status(%Scope{} = scope, %Repository{} = repository, status) do
     status = to_string(status)
+    previous_status = repository.listing_status
 
-    transact_repository_authorized(scope, repository.id, fn fresh_scope, canonical_repository ->
-      with :ok <- Policy.authorize(fresh_scope, :manage_repository, canonical_repository),
-           :ok <- repository_hold_allows_listing(fresh_scope, canonical_repository, status),
-           {:ok, updated} <-
-             canonical_repository
-             |> Repository.listing_changeset(%{listing_status: status})
-             |> Repo.update() do
-        audit!(fresh_scope, :repository_listing_status_updated, updated, %{
-          from_state: canonical_repository.listing_status,
-          to_state: updated.listing_status
-        })
+    result =
+      transact_repository_authorized(scope, repository.id, fn fresh_scope, canonical_repository ->
+        with :ok <- Policy.authorize(fresh_scope, :manage_repository, canonical_repository),
+             :ok <- repository_hold_allows_listing(fresh_scope, canonical_repository, status),
+             {:ok, updated} <-
+               canonical_repository
+               |> Repository.listing_changeset(%{listing_status: status})
+               |> Repo.update() do
+          audit!(fresh_scope, :repository_listing_status_updated, updated, %{
+            from_state: canonical_repository.listing_status,
+            to_state: updated.listing_status
+          })
 
-        {:ok, updated}
-      end
-    end)
-    |> notify_repository_update()
+          {:ok, updated}
+        end
+      end)
+
+    case result do
+      {:ok, %Repository{} = updated} = ok ->
+        if previous_status != updated.listing_status do
+          _ =
+            Tarakan.Epidemics.schedule_refresh_for_repository_after_commit(updated.id,
+              reason: :listing_change
+            )
+        end
+
+        notify_repository_update(ok)
+
+      other ->
+        other
+    end
   end
 
   @doc """
   Aggregate state of the registry, for the public dashboard.
+  Cached in ETS for 30s (PR 8).
   """
   def registry_stats do
+    ttl = registry_stats_ttl()
+
+    if ttl <= 0 do
+      load_registry_stats()
+    else
+      now = System.system_time(:second)
+      table = registry_stats_table()
+
+      case :ets.lookup(table, :stats) do
+        [{:stats, stats, expires_at}] when expires_at > now ->
+          stats
+
+        _ ->
+          stats = load_registry_stats()
+          true = :ets.insert(table, {:stats, stats, now + ttl})
+          stats
+      end
+    end
+  end
+
+  @doc "Drop ETS cache after registry mutations so dashboards stay live."
+  def invalidate_registry_stats do
+    case :ets.whereis(:tarakan_registry_stats) do
+      :undefined -> :ok
+      _tid -> :ets.delete(:tarakan_registry_stats, :stats)
+    end
+
+    :ok
+  end
+
+  defp registry_stats_ttl do
+    Application.get_env(:tarakan, :registry_stats_ttl_seconds, 30)
+  end
+
+  defp load_registry_stats do
     Repo.one(
       from repository in Repository,
         where: repository.listing_status == "listed",
@@ -329,7 +381,27 @@ defmodule Tarakan.Repositories do
           open_findings: coalesce(sum(repository.open_findings_count), 0),
           verified_findings: coalesce(sum(repository.verified_findings_count), 0)
         }
-    )
+    ) ||
+      %{repositories: 0, unscanned: 0, open_findings: 0, verified_findings: 0}
+  end
+
+  defp registry_stats_table do
+    case :ets.whereis(:tarakan_registry_stats) do
+      :undefined ->
+        try do
+          :ets.new(:tarakan_registry_stats, [
+            :named_table,
+            :public,
+            :set,
+            read_concurrency: true
+          ])
+        rescue
+          ArgumentError -> :tarakan_registry_stats
+        end
+
+      _tid ->
+        :tarakan_registry_stats
+    end
   end
 
   def get_repository(host, owner, name)
@@ -689,7 +761,11 @@ defmodule Tarakan.Repositories do
   defp notify_membership_authorization_change(result), do: result
 
   defp notify_repository_update({:ok, %Repository{} = repository} = result) do
-    unless Repo.in_transaction?(), do: broadcast_record_updated(repository)
+    unless Repo.in_transaction?() do
+      invalidate_registry_stats()
+      broadcast_record_updated(repository)
+    end
+
     result
   end
 

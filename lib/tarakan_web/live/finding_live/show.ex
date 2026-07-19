@@ -17,11 +17,14 @@ defmodule TarakanWeb.FindingLive.Show do
       Reputation.subscribe()
     end
 
+    public_url = TarakanWeb.Endpoint.url() <> ~p"/findings/#{finding.public_id}"
+
     {:ok,
      socket
      |> assign(:page_title, finding.title)
      |> assign(:meta_description, meta_description(scan, finding))
      |> assign(:canonical_path, ~p"/findings/#{finding.public_id}")
+     |> assign(:public_url, public_url)
      |> assign(:og_type, "article")
      |> assign(:json_ld, finding_json_ld(scan, finding))
      |> assign(:comment_body, "")
@@ -259,7 +262,7 @@ defmodule TarakanWeb.FindingLive.Show do
   # identify the finding before the free-text description.
   defp meta_description(scan, finding) do
     prefix =
-      "#{String.capitalize(finding.severity)} severity finding in " <>
+      "#{String.capitalize(finding.severity)} in " <>
         "#{scan.repository.owner}/#{scan.repository.name} (#{finding.file_path}): "
 
     truncate(prefix <> String.replace(finding.description, ~r/\s+/, " "), 160)

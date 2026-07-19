@@ -9,3 +9,6 @@
 #
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
+
+# Contagion demo patterns (needs listed repos + an active account already present).
+Code.require_file("seed_epidemics.exs", __DIR__)

@@ -9,10 +9,7 @@
       "mt-4 flex flex-col gap-5 border-b-2 border-strong pb-7 sm:flex-row sm:items-end sm:justify-between"
     ]}>
       <div>
-        <p class={["font-mono text-[10px] uppercase tracking-[0.2em] text-signal"]}>
-          Platform control
-        </p>
-        <h1 class={["mt-2 font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-5xl"]}>
+        <h1 class={["font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-5xl"]}>
           Administration
         </h1>
         <p class={["mt-3 max-w-2xl text-sm leading-6 text-ink-muted"]}>
@@ -38,7 +35,7 @@
         {"restricted", "Restricted", @summary.restricted}
       ] do %>
         <article id={"admin-summary-#{id}"} class={["border-2 border-strong bg-panel px-5 py-5"]}>
-          <p class={["font-mono text-[10px] uppercase tracking-[0.18em] text-ink-faint"]}>
+          <p class={["text-xs font-medium text-ink-faint"]}>
             {label}
           </p>
           <p class={["mt-2 font-display text-3xl text-ink"]}>{value}</p>

@@ -1,5 +1,5 @@
 defmodule TarakanWeb.Plugs.CodeBrowserRateLimitTest do
-  use ExUnit.Case, async: false
+  use Tarakan.DataCase, async: false
 
   import Plug.Conn
   import Plug.Test
@@ -8,7 +8,8 @@ defmodule TarakanWeb.Plugs.CodeBrowserRateLimitTest do
 
   test "limits code and finding routes before LiveView authorization" do
     opts = CodeBrowserRateLimit.init(request_limit: 1, window_seconds: 60)
-    remote_ip = {10, 44, 55, 66}
+    # Unique IP per run so shared postgres buckets do not collide across tests.
+    remote_ip = {10, 44, 55, System.unique_integer([:positive]) |> rem(200) |> Kernel.+(1)}
 
     first = conn(:get, "/findings/55d5c681-240a-4e3a-a1f8-45933a30c4ef/code")
     first = %{first | remote_ip: remote_ip} |> CodeBrowserRateLimit.call(opts)

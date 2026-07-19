@@ -217,7 +217,7 @@ defmodule TarakanWeb.ModerationCaseLive.Show do
   defp status_label("in_review"), do: "In review"
   defp status_label(status), do: String.capitalize(status)
 
-  defp subject_label("review_task"), do: "Review task"
+  defp subject_label("review_task"), do: "Job"
 
   defp subject_label(subject_type),
     do: subject_type |> String.replace("_", " ") |> String.capitalize()

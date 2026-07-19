@@ -17,6 +17,8 @@ defmodule Tarakan.Scans.CanonicalFinding do
   schema "canonical_findings" do
     field :public_id, Ecto.UUID, autogenerate: true
     field :fingerprint, :string
+    # Cross-repo epidemic key: normalized title only (path/lines stripped).
+    field :pattern_key, :string
     field :file_path, :string
     field :line_start, :integer
     field :line_end, :integer
@@ -48,6 +50,7 @@ defmodule Tarakan.Scans.CanonicalFinding do
     |> cast(attrs, [
       :repository_id,
       :fingerprint,
+      :pattern_key,
       :file_path,
       :line_start,
       :line_end,

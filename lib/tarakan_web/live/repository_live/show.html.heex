@@ -8,7 +8,7 @@
       class="mt-6 grid gap-3 border-2 border-strong sm:grid-cols-3"
     >
       <div class="border-b-2 border-strong px-4 py-4 sm:border-b-0 sm:border-r-2">
-        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+        <p class="text-xs font-medium text-ink-faint">
           Open findings
         </p>
         <p id="open-findings-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
@@ -17,14 +17,14 @@
         <p class="mt-1 text-xs text-ink-muted">Unique issues still open</p>
       </div>
       <div class="border-b-2 border-strong px-4 py-4 sm:border-b-0 sm:border-r-2">
-        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Verified</p>
+        <p class="text-xs font-medium text-ink-faint">Verified</p>
         <p id="verified-findings-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
           {@repository.verified_findings_count}
         </p>
         <p class="mt-1 text-xs text-ink-muted">Independently confirmed</p>
       </div>
       <div class="px-4 py-4">
-        <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Reports</p>
+        <p class="text-xs font-medium text-ink-faint">Reports</p>
         <p id="scan-count" class="mt-1 font-display text-3xl tabular-nums text-ink">
           {@repository.scan_count}
         </p>
@@ -34,9 +34,9 @@
 
     <p class="mt-4 max-w-2xl text-sm leading-6 text-ink-muted">
       <span class="font-semibold text-ink">Findings</span>
-      are the issues. <span class="font-semibold text-ink">Jobs</span>
-      are open work for humans or agents. <span class="font-semibold text-ink">Reports</span>
-      are the raw submissions behind everything.
+      are the issues. <span class="font-semibold text-ink">Reports</span>
+      are submissions at a commit. <span class="font-semibold text-ink">Jobs</span>
+      are optional pickup tickets.
     </p>
 
     <%!-- Findings first: what matters --%>
@@ -50,10 +50,62 @@
             Merged view of the same issue seen across runs. Tap a title for detail.
           </p>
         </div>
-        <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+        <span class="font-mono text-[11px] text-ink-faint">
           {@repository.open_findings_count} unique open
         </span>
       </div>
+
+      <form
+        :if={@checkable_findings_count > 0}
+        id="bulk-check-findings-form"
+        phx-submit="bulk_check_findings"
+        class="mt-4 border-2 border-strong bg-panel px-4 py-4"
+      >
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-semibold text-ink">
+              Check all ({@checkable_findings_count})
+            </p>
+            <p class="mt-1 text-xs leading-5 text-ink-faint">
+              One notes field applies to every finding you can check. Override a single finding below if needed.
+            </p>
+            <input
+              id="bulk-check-notes"
+              type="text"
+              name="notes"
+              required
+              minlength="20"
+              maxlength="2000"
+              placeholder="Independent evidence notes (required, 20+ chars)"
+              autocomplete="off"
+              class="mt-3 w-full border-2 border-strong bg-ground px-3 py-2 font-mono text-xs text-ink placeholder:text-ink-faint focus:border-signal focus:outline-none"
+            />
+          </div>
+          <div class="flex shrink-0 flex-wrap gap-2">
+            <button
+              name="verdict"
+              value="confirmed"
+              class="border-2 border-strong px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-quote hover:text-quote"
+            >
+              Confirm all
+            </button>
+            <button
+              name="verdict"
+              value="disputed"
+              class="border-2 border-strong px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-signal hover:text-signal"
+            >
+              Dispute all
+            </button>
+            <button
+              name="verdict"
+              value="fixed"
+              class="border-2 border-strong px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink transition hover:border-quote hover:text-quote"
+            >
+              Fixed all
+            </button>
+          </div>
+        </div>
+      </form>
 
       <div
         :if={@canonical_findings == []}
@@ -62,9 +114,8 @@
       >
         <p class="text-sm font-medium text-ink">No findings yet</p>
         <p class="mt-1 text-xs leading-5 text-ink-muted">
-          Next: open a job below, or run
-          <code class="font-mono text-ink">tarakan --agent codex --pickup</code>
-          from a clone.
+          <code class="font-mono text-ink">tarakan worker --agent codex</code>
+          or open a Job below.
         </p>
       </div>
 
@@ -138,8 +189,8 @@
               </p>
 
               <details :if={finding.can_check} class="mt-3">
-                <summary class="cursor-pointer font-mono text-[10px] uppercase tracking-[0.14em] text-signal transition hover:underline">
-                  Check this finding
+                <summary class="cursor-pointer font-mono text-[11px] text-signal transition hover:underline">
+                  Override this finding only
                 </summary>
                 <form
                   id={"canonical-#{finding.public_id}-check-form"}
@@ -154,28 +205,28 @@
                     required
                     minlength="20"
                     maxlength="2000"
-                    placeholder="Independent evidence or counter-evidence"
+                    placeholder="Notes for this finding only"
                     autocomplete="off"
                     class="min-w-0 flex-1 basis-64 border border-rule bg-transparent px-3 py-1.5 font-mono text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:ring-1 focus:ring-phosphor"
                   />
                   <button
                     name="verdict"
                     value="confirmed"
-                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
+                    class="border border-rule px-3 py-1.5 font-mono text-[11px] transition hover:border-quote hover:text-quote"
                   >
                     Confirm
                   </button>
                   <button
                     name="verdict"
                     value="disputed"
-                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-signal hover:text-signal"
+                    class="border border-rule px-3 py-1.5 font-mono text-[11px] transition hover:border-signal hover:text-signal"
                   >
                     Dispute
                   </button>
                   <button
                     name="verdict"
                     value="fixed"
-                    class="border border-rule px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.12em] transition hover:border-quote hover:text-quote"
+                    class="border border-rule px-3 py-1.5 font-mono text-[11px] transition hover:border-quote hover:text-quote"
                   >
                     Fixed
                   </button>
@@ -208,12 +259,12 @@
 
       <div class="mt-4 border-2 border-strong bg-panel px-4 py-4">
         <%= if @current_scope && @current_scope.account do %>
-          <div class="flex flex-wrap items-center gap-3">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <button
               id="quick-open-job-button"
               type="button"
               phx-click="quick_open_job"
-              class="clip-notch bg-btn px-5 py-2.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-click-loading:opacity-60"
+              class="clip-notch w-full bg-btn px-5 py-3 text-center font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90 phx-click-loading:opacity-60 sm:w-auto sm:py-2.5"
             >
               {if @can_auto_open_job,
                 do: "Open security report job",
@@ -223,7 +274,7 @@
               id="propose-task-toggle"
               type="button"
               phx-click="toggle_task_form"
-              class="font-mono text-xs text-signal transition hover:underline"
+              class="self-start py-1 font-mono text-xs text-signal transition hover:underline sm:self-auto"
             >
               {if @show_task_form, do: "Cancel", else: "Customize…"}
             </button>
@@ -315,7 +366,7 @@
               <.input
                 field={@task_form[:capability]}
                 type="select"
-                label="Who should do it"
+                label="Who can do it"
                 options={@capability_options}
               />
               <.input
@@ -386,7 +437,7 @@
           <div class="flex shrink-0 flex-wrap items-center gap-2">
             <.link
               id={"review-task-#{task.id}-link"}
-              navigate={~p"/work/#{task.id}"}
+              navigate={~p"/jobs/#{task.id}"}
               class="border-2 border-strong px-3 py-1.5 text-center font-display text-[11px] uppercase tracking-[0.16em] text-ink transition hover:border-signal hover:text-signal"
             >
               Open
@@ -553,79 +604,77 @@
             Detailed evidence is restricted.
           </p>
 
-          <.form
+          <details
             :if={can_moderate?(scan, @current_scope)}
-            for={@moderation_form}
-            id={"scan-#{scan.id}-moderation-form"}
-            phx-submit="moderate_scan"
             class="mt-4 border-l-2 border-rule pl-4"
           >
-            <input type="hidden" name="scan_id" value={scan.id} />
-            <div class="grid gap-3 sm:grid-cols-2">
-              <.input
-                id={"scan-#{scan.id}-moderation-reason"}
-                field={@moderation_form[:moderation_reason]}
-                type="text"
-                label="Decision reason code"
-                placeholder="evidence_reviewed"
-              />
+            <summary class="cursor-pointer text-sm font-semibold text-ink transition hover:text-signal">
+              Moderate this report
+            </summary>
+            <.form
+              for={@moderation_form}
+              id={"scan-#{scan.id}-moderation-form"}
+              phx-submit="moderate_scan"
+              class="mt-3"
+            >
+              <input type="hidden" name="scan_id" value={scan.id} />
               <.input
                 id={"scan-#{scan.id}-moderation-notes"}
                 field={@moderation_form[:moderation_notes]}
                 type="textarea"
-                label="Decision evidence"
-                placeholder="Explain what was independently checked and why this decision is warranted."
+                label="What did you check?"
+                placeholder="What was independently verified (20+ characters)."
               />
-            </div>
-            <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                :if={scan.review_status != "accepted"}
-                name="decision"
-                value="accept"
-                class="clip-notch bg-btn px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90"
-              >
-                Accept
-              </button>
-              <button
-                name="decision"
-                value="contest"
-                class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink transition hover:border-signal hover:text-signal"
-              >
-                Contest
-              </button>
-              <button
-                name="decision"
-                value="reject"
-                class="border-2 border-signal px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-signal transition hover:bg-signal hover:text-ground"
-              >
-                Reject
-              </button>
-              <button
-                :if={scan.visibility != "public"}
-                name="decision"
-                value="publish_full"
-                class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink"
-              >
-                Restore full evidence
-              </button>
-              <button
-                :if={scan.visibility == "public"}
-                name="decision"
-                value="publish_summary"
-                class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink"
-              >
-                Redact to summary
-              </button>
-              <button
-                :if={scan.visibility != "restricted"}
-                name="decision"
-                value="restrict"
-                class="border-2 border-signal px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-signal transition hover:bg-signal hover:text-ground"
-              >
-                Restrict
-              </button>
-            </div>
-          </.form>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  :if={scan.review_status != "accepted"}
+                  name="decision"
+                  value="accept"
+                  class="clip-notch bg-btn px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-btn-fg transition hover:opacity-90"
+                >
+                  Accept
+                </button>
+                <button
+                  name="decision"
+                  value="contest"
+                  class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink transition hover:border-signal hover:text-signal"
+                >
+                  Contest
+                </button>
+                <button
+                  name="decision"
+                  value="reject"
+                  class="border-2 border-signal px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-signal transition hover:bg-signal hover:text-ground"
+                >
+                  Reject
+                </button>
+                <button
+                  :if={scan.visibility != "public"}
+                  name="decision"
+                  value="publish_full"
+                  class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink"
+                >
+                  Restore full evidence
+                </button>
+                <button
+                  :if={scan.visibility == "public"}
+                  name="decision"
+                  value="publish_summary"
+                  class="border-2 border-strong px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-ink"
+                >
+                  Redact to summary
+                </button>
+                <button
+                  :if={scan.visibility != "restricted"}
+                  name="decision"
+                  value="restrict"
+                  class="border-2 border-signal px-4 py-1.5 font-display text-xs uppercase tracking-[0.18em] text-signal transition hover:bg-signal hover:text-ground"
+                >
+                  Restrict
+                </button>
+              </div>
+            </.form>
+          </details>
         </article>
       </div>
     </section>

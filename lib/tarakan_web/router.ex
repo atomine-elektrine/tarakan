@@ -44,6 +44,10 @@ defmodule TarakanWeb.Router do
 
     get "/robots.txt", SEOController, :robots
     get "/sitemap.xml", SEOController, :sitemap
+    get "/sitemap/hubs.xml", SEOController, :sitemap_hubs
+    get "/sitemap/repos/:page", SEOController, :sitemap_repos
+    get "/sitemap/findings/:page", SEOController, :sitemap_findings
+    get "/sitemap/jobs/:page", SEOController, :sitemap_jobs
   end
 
   scope "/", TarakanWeb do
@@ -57,17 +61,14 @@ defmodule TarakanWeb.Router do
     live_session :public, on_mount: [{TarakanWeb.AccountAuth, :mount_current_scope}] do
       live "/", RepositoryLive.Index, :index
       live "/explore", ExploreLive, :index
+      live "/patterns", EpidemicLive.Index, :index
+      live "/patterns/:pattern_key", EpidemicLive.Show, :show
       live "/leaderboard", LeaderboardLive, :index
-      # Public contribution queue (human + agent landing for organic traffic).
       live "/jobs", JobsLive, :index
-      live "/requests", JobsLive, :index
+      live "/jobs/:id", ReviewTaskLive.Show, :show
       live "/agents", AgentsLive, :index
-      live "/for-agents", AgentsLive, :index
       live "/findings/:public_id", FindingLive.Show, :show
       live "/findings/:finding_ref/code", RepositoryCodeLive, :finding
-      # Request (work queue) - /requests is preferred; /work kept for compatibility
-      live "/requests/:id", ReviewTaskLive.Show, :show
-      live "/work/:id", ReviewTaskLive.Show, :show
     end
   end
 
@@ -84,35 +85,21 @@ defmodule TarakanWeb.Router do
     get "/repositories", RepositoryController, :index
     delete "/client-auth/session", ClientAuthController, :revoke
 
-    # Global open Jobs queue, then per-id Request lifecycle.
-    get "/requests", WorkController, :queue
+    # Jobs
     get "/jobs", WorkController, :queue
-    get "/requests/:id", WorkController, :show
-    post "/requests/:id/claim", WorkController, :claim
-    post "/requests/:id/claim/renew", WorkController, :renew
-    delete "/requests/:id/claim", WorkController, :release
-    post "/requests/:id/complete", WorkController, :complete
-    get "/work/:id", WorkController, :show
-    post "/work/:id/claim", WorkController, :claim
-    post "/work/:id/claim/renew", WorkController, :renew
-    delete "/work/:id/claim", WorkController, :release
-    post "/work/:id/complete", WorkController, :complete
+    get "/jobs/:id", WorkController, :show
+    post "/jobs/:id/claim", WorkController, :claim
+    post "/jobs/:id/claim/renew", WorkController, :renew
+    delete "/jobs/:id/claim", WorkController, :release
+    post "/jobs/:id/complete", WorkController, :complete
+    get "/:host/:owner/:name/jobs", WorkController, :index
 
-    # Reports (mass) + Reviews + Scans (compat aliases - same controller)
+    # Reports + findings + checks
     get "/:host/:owner/:name/reports", ScanController, :index
     get "/:host/:owner/:name/memory", ScanController, :memory
     post "/:host/:owner/:name/reports", ScanController, :create
     post "/:host/:owner/:name/findings/:public_id/check", ScanController, :finding_verdict
     post "/:host/:owner/:name/reports/:id/check", ScanController, :verdict
-    post "/:host/:owner/:name/reports/:id/verdict", ScanController, :verdict
-    get "/:host/:owner/:name/reviews", ScanController, :index
-    post "/:host/:owner/:name/reviews", ScanController, :create
-    post "/:host/:owner/:name/reviews/:id/verdict", ScanController, :verdict
-    get "/:host/:owner/:name/scans", ScanController, :index
-    post "/:host/:owner/:name/scans", ScanController, :create
-    post "/:host/:owner/:name/scans/:id/verdict", ScanController, :verdict
-    get "/:host/:owner/:name/requests", WorkController, :index
-    get "/:host/:owner/:name/tasks", WorkController, :index
   end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
@@ -191,7 +178,7 @@ defmodule TarakanWeb.Router do
       on_mount: [{TarakanWeb.AccountAuth, :mount_current_scope}] do
       # A bare single segment is a contributor profile (GitHub-style
       # /handle). Handles that would shadow a fixed route are reserved at
-      # registration, so this can never swallow /accounts, /work, etc.
+      # registration, so this can never swallow /accounts, /jobs, etc.
       live "/:handle", AccountLive.Profile, :show
 
       live "/:owner/:name", RepositoryCodeLive, :entry

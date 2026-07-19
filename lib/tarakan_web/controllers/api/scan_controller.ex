@@ -68,6 +68,11 @@ defmodule TarakanWeb.API.ScanController do
           |> put_status(:too_many_requests)
           |> json(%{error: "review submission rate exceeded"})
 
+        {:error, :secrets_detected} ->
+          unprocessable(conn, %{
+            document: ["remove secrets or credentials before publishing a report"]
+          })
+
         {:error, %Ecto.Changeset{} = changeset} ->
           unprocessable(conn, changeset_errors(changeset))
       end
@@ -124,7 +129,8 @@ defmodule TarakanWeb.API.ScanController do
           "verdict" => params["verdict"],
           "provenance" => params["provenance"] || "agent",
           "notes" => params["notes"],
-          "evidence" => params["evidence"]
+          "evidence" => params["evidence"],
+          "client_ip" => TarakanWeb.Plugs.ClientIp.remote_ip_string(conn)
         }
 
         case FindingMemory.record_check(scope, repository, public_id, attrs) do
@@ -141,6 +147,11 @@ defmodule TarakanWeb.API.ScanController do
             conn
             |> put_status(:conflict)
             |> json(%{error: "a finding submitter cannot independently verify it"})
+
+          {:error, :secrets_detected} ->
+            unprocessable(conn, %{
+              notes: ["remove secrets or credentials before submitting a check"]
+            })
 
           {:error, :unauthorized} ->
             conn
@@ -167,8 +178,7 @@ defmodule TarakanWeb.API.ScanController do
         # review queue); sensitive findings are gated per-scan by list_scans.
         scans = Scans.list_scans(scope, repository)
         encoded = Enum.map(scans, &scan_summary_json/1)
-        # Mass key "reports" + legacy reviews/scans.
-        json(conn, %{reports: encoded, reviews: encoded, scans: encoded})
+        json(conn, %{reports: encoded})
 
       nil ->
         conn
@@ -193,7 +203,8 @@ defmodule TarakanWeb.API.ScanController do
         "verdict" => params["verdict"],
         "provenance" => params["provenance"] || "agent",
         "notes" => params["notes"],
-        "evidence" => params["evidence"]
+        "evidence" => params["evidence"],
+        "client_ip" => TarakanWeb.Plugs.ClientIp.remote_ip_string(conn)
       }
 
       case Scans.record_confirmation(scope, scan, attrs) do
@@ -205,6 +216,11 @@ defmodule TarakanWeb.API.ScanController do
           conn
           |> put_status(:conflict)
           |> json(%{error: "the submitter of a review cannot verify it"})
+
+        {:error, :secrets_detected} ->
+          unprocessable(conn, %{
+            notes: ["remove secrets or credentials before submitting a check"]
+          })
 
         {:error, :unauthorized} ->
           conn
@@ -305,8 +321,12 @@ defmodule TarakanWeb.API.ScanController do
   defp encode_document(_params), do: :error
 
   defp scan_json(scan, repository) do
+    base = TarakanWeb.Endpoint.url()
+    findings = public_finding_links(scan, base)
+
     %{
       id: scan.id,
+      kind: "report",
       repository: "#{repository.owner}/#{repository.name}",
       commit_sha: scan.commit_sha,
       commit_committed_at: scan.commit_committed_at,
@@ -320,10 +340,24 @@ defmodule TarakanWeb.API.ScanController do
       verified: Scans.Scan.verified?(scan),
       review_status: scan.review_status,
       visibility: scan.visibility,
-      record_url:
-        TarakanWeb.Endpoint.url() <> TarakanWeb.RepositoryPaths.repository_path(repository)
+      disclosed: scan.visibility in ["public", "public_summary"],
+      record_url: base <> TarakanWeb.RepositoryPaths.repository_security_path(repository),
+      findings: findings
     }
   end
+
+  defp public_finding_links(%{findings: findings}, base) when is_list(findings) do
+    Enum.map(findings, fn finding ->
+      %{
+        public_id: finding.public_id,
+        title: finding.title,
+        severity: finding.severity,
+        url: base <> "/findings/#{finding.public_id}"
+      }
+    end)
+  end
+
+  defp public_finding_links(_scan, _base), do: []
 
   defp memory_finding_json(finding, target_commit_sha) do
     finding

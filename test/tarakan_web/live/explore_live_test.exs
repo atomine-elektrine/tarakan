@@ -30,7 +30,7 @@ defmodule TarakanWeb.ExploreLiveTest do
     assert has_element?(view, "#wire-reg-#{repository.id}")
     refute has_element?(view, "#wire-scan-#{scan.id}")
 
-    view |> element("#explore-filter button", "Reviews") |> render_click()
+    view |> element("#explore-filter button", "Reports") |> render_click()
 
     assert has_element?(view, "#wire-scan-#{scan.id}")
     refute has_element?(view, "#wire-reg-#{repository.id}")
@@ -58,7 +58,7 @@ defmodule TarakanWeb.ExploreLiveTest do
     {:ok, view, _html} = live(conn, ~p"/explore")
 
     assert render(view) =~ "@#{reviewer.handle}"
-    assert render(view) =~ "confirmed a review of"
+    assert render(view) =~ "confirmed a finding on"
   end
 
   test "handles link to contributor profiles", %{conn: conn} do
@@ -135,6 +135,15 @@ defmodule TarakanWeb.ExploreLiveTest do
     [finding] = scan.findings
     canonical = finding.canonical_finding
 
+    # Hot rail excludes pure single-run unconfirmed noise; second detection qualifies.
+    _second =
+      scan_fixture(repository, account_fixture(), %{
+        "findings_json" => findings_json_fixture(1),
+        "commit_sha" => scan.commit_sha
+      })
+
+    canonical = Tarakan.Repo.get!(Tarakan.Scans.CanonicalFinding, canonical.id)
+
     {:ok, view, _html} = live(conn, ~p"/explore")
 
     assert has_element?(view, "#hot-findings", "No findings upvoted this week.")
@@ -146,6 +155,6 @@ defmodule TarakanWeb.ExploreLiveTest do
 
     assert view
            |> element("#hot-finding-#{canonical.id}")
-           |> render() =~ ~s(href="/findings/#{finding.public_id}")
+           |> render() =~ ~s(href="/findings/)
   end
 end

@@ -13,6 +13,7 @@ defmodule Tarakan.Scans.FindingCheck do
     field :provenance, :string, default: "human"
     field :notes, :string
     field :evidence, :string
+    field :client_ip_hash, :binary
 
     belongs_to :canonical_finding, Tarakan.Scans.CanonicalFinding
     belongs_to :scan_finding, Tarakan.Scans.Finding
@@ -26,7 +27,7 @@ defmodule Tarakan.Scans.FindingCheck do
   @doc false
   def changeset(check, attrs) do
     check
-    |> cast(attrs, [:commit_sha, :verdict, :provenance, :notes, :evidence])
+    |> cast(attrs, [:commit_sha, :verdict, :provenance, :notes, :evidence, :client_ip_hash])
     |> validate_required([:commit_sha, :verdict, :provenance, :notes])
     |> validate_format(:commit_sha, ~r/^[0-9a-f]{40}$/)
     |> validate_inclusion(:verdict, @verdicts)

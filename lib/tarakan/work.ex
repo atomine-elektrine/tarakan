@@ -29,6 +29,8 @@ defmodule Tarakan.Work do
   @claim_mutation_limit 30
   @claim_mutation_window_seconds 60
   @finding_kinds ~w(code_review threat_model privacy_review business_logic)
+  # Cap auto-opened check jobs so spam Reports cannot empty the agent swarm.
+  @verify_jobs_per_repo_day 15
   # Queue slots that still block a duplicate of the same work item.
   @active_job_statuses ~w(proposed open claimed submitted changes_requested)
 
@@ -101,7 +103,16 @@ defmodule Tarakan.Work do
       repository.listing_status == "listed" and task.status in ^claimable and
         task.visibility in ["public_summary", "public"]
     )
-    |> order_by([task], desc: task.inserted_at, desc: task.id)
+    |> order_by(
+      [task],
+      asc:
+        fragment(
+          "CASE ? WHEN 'verify_findings' THEN 0 ELSE 1 END",
+          task.kind
+        ),
+      desc: task.inserted_at,
+      desc: task.id
+    )
     |> limit(^limit)
     |> preload([:repository, :created_by])
     |> Repo.all()
@@ -121,9 +132,18 @@ defmodule Tarakan.Work do
       repository.listing_status == "listed" and task.status in ^claimable and
         task.visibility in ["public_summary", "public"]
     )
-    |> order_by([task], desc: task.updated_at, desc: task.id)
+    |> order_by(
+      [task],
+      asc:
+        fragment(
+          "CASE ? WHEN 'verify_findings' THEN 0 ELSE 1 END",
+          task.kind
+        ),
+      desc: task.updated_at,
+      desc: task.id
+    )
     |> limit(^limit)
-    |> select([task], %{id: task.id, updated_at: task.updated_at})
+    |> select([task], %{id: task.id, updated_at: task.updated_at, kind: task.kind})
     |> Repo.all()
   end
 
@@ -169,12 +189,18 @@ defmodule Tarakan.Work do
       end
 
     base
+    # Active claims, then check jobs, then other open work.
     |> order_by(
       [task],
       asc:
         fragment(
           "CASE ? WHEN 'claimed' THEN 0 WHEN 'open' THEN 1 WHEN 'changes_requested' THEN 2 ELSE 3 END",
           task.status
+        ),
+      asc:
+        fragment(
+          "CASE ? WHEN 'verify_findings' THEN 0 ELSE 1 END",
+          task.kind
         ),
       desc: task.inserted_at,
       desc: task.id
@@ -333,6 +359,9 @@ defmodule Tarakan.Work do
       active_verification_job?(scan.id) ->
         {:ok, :skipped_duplicate}
 
+      not verification_job_budget_ok?(scan.repository_id) ->
+        {:ok, :skipped_budget}
+
       true ->
         open_agent_verification_job(scan)
     end
@@ -352,6 +381,101 @@ defmodule Tarakan.Work do
           task.target_review_id == ^scan_id and task.kind == "verify_findings" and
             task.status in ^@active_job_statuses
     )
+  end
+
+  defp verification_job_budget_ok?(repository_id) when is_integer(repository_id) do
+    cutoff = DateTime.add(DateTime.utc_now(), -1, :day)
+
+    count =
+      Repo.aggregate(
+        from(task in ReviewTask,
+          where:
+            task.repository_id == ^repository_id and task.kind == "verify_findings" and
+              task.inserted_at >= ^cutoff
+        ),
+        :count
+      )
+
+    count < @verify_jobs_per_repo_day
+  end
+
+  defp verification_job_budget_ok?(_), do: false
+
+  @doc """
+  Opens a public verify_findings job for one epidemic instance map
+  (`%{repository_id, scan_id, commit_sha, title, ...}`).
+
+  Skips when a job already exists or the repo's daily check-job budget is spent.
+  """
+  def open_epidemic_verification_job(%Scope{account: %Account{} = account} = scope, instance)
+      when is_map(instance) do
+    scan_id = instance[:scan_id] || instance["scan_id"]
+    repository_id = instance[:repository_id] || instance["repository_id"]
+
+    with :ok <- Policy.authorize(scope, :moderate),
+         true <- is_integer(scan_id),
+         %Scan{} = scan <- Repo.get(Scan, scan_id),
+         scan <- Repo.preload(scan, :repository),
+         true <- scan.repository_id == repository_id do
+      cond do
+        active_verification_job?(scan.id) ->
+          {:ok, :skipped_duplicate}
+
+        not verification_job_budget_ok?(scan.repository_id) ->
+          {:ok, :skipped_budget}
+
+        true ->
+          open_epidemic_job_for_scan(scan, account, instance)
+      end
+    else
+      nil -> {:error, :not_found}
+      false -> {:error, :not_found}
+      {:error, reason} -> {:error, reason}
+      _ -> {:error, :unauthorized}
+    end
+  end
+
+  def open_epidemic_verification_job(_scope, _instance), do: {:error, :unauthorized}
+
+  defp open_epidemic_job_for_scan(%Scan{} = scan, %Account{} = account, instance) do
+    repository = scan.repository || Repo.get!(Repository, scan.repository_id)
+    short = String.slice(scan.commit_sha || "", 0, 7)
+    title = instance[:title] || instance["title"] || "pattern"
+
+    attrs =
+      fill_task_defaults(repository, %{
+        "commit_sha" => scan.commit_sha,
+        "kind" => "verify_findings",
+        "capability" => "agent",
+        "target_review_id" => scan.id,
+        "title" => "Epidemic check · #{repository.owner}/#{repository.name} @ #{short}",
+        "description" =>
+          "Epidemic swarm check for pattern: #{title}. " <>
+            "Independently re-check findings at the pinned commit. Do not invent new findings."
+      })
+
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    changeset =
+      %ReviewTask{}
+      |> ReviewTask.creation_changeset(attrs)
+      |> Ecto.Changeset.put_change(:repository_id, repository.id)
+      |> Ecto.Changeset.put_change(:created_by_id, account.id)
+      |> Ecto.Changeset.put_change(:status, "open")
+      |> Ecto.Changeset.put_change(:visibility, "public")
+      |> Ecto.Changeset.put_change(:published_at, now)
+      |> Ecto.Changeset.put_change(:disclosed_at, now)
+      |> Ecto.Changeset.put_change(:commit_committed_at, scan.commit_committed_at)
+
+    case Repo.insert(changeset) do
+      {:ok, task} ->
+        broadcast(repository.id, {:review_task_created, task.id})
+        broadcast(repository.id, {:review_task_published, task.id})
+        {:ok, preload_task(task)}
+
+      {:error, changeset} ->
+        {:error, changeset}
+    end
   end
 
   defp open_agent_verification_job(%Scan{} = scan) do
@@ -927,6 +1051,10 @@ defmodule Tarakan.Work do
           broadcast(task.repository_id, {:review_task_submitted, task.id})
           Scans.broadcast_review_submitted(review)
           _ = maybe_open_agent_verification_job(review)
+
+          _ =
+            Tarakan.Epidemics.schedule_refresh_for_scan_after_commit(review, reason: :assimilate)
+
           {:ok, task}
 
         {:error, reason} ->
@@ -1059,9 +1187,6 @@ defmodule Tarakan.Work do
       {key, value} when is_binary(key) -> {key, value}
     end)
   end
-
-  # Backward-compatible endpoint semantics: completion now means submission.
-  def complete_task(%ReviewTask{} = task, actor, attrs), do: submit_task(task, actor, attrs)
 
   def accept_task(%ReviewTask{} = task, actor, attrs),
     do: review_task(task, actor, "accept", "accepted", attrs)
@@ -1705,6 +1830,11 @@ defmodule Tarakan.Work do
     if metadata.repository_promoted? do
       Repositories.broadcast_registration(task.repository)
       Activity.broadcast_registration(task.repository)
+
+      _ =
+        Tarakan.Epidemics.schedule_refresh_for_repository_after_commit(task.repository_id,
+          reason: :listing_change
+        )
     end
 
     {:ok, task}

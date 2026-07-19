@@ -45,9 +45,6 @@ defmodule TarakanWeb.RepositoryComponents do
         >
           {repository_status_label(@repository)}
         </.notch_badge>
-        <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-          public record
-        </span>
         <.notch_badge :if={@repository.archived} class="text-signal">
           archived
         </.notch_badge>
@@ -71,16 +68,16 @@ defmodule TarakanWeb.RepositoryComponents do
           href={@repository.canonical_url}
           rel="noreferrer"
           target="_blank"
-          class="inline-flex shrink-0 items-center gap-2 font-mono text-xs text-ink-muted transition hover:text-signal"
+          class="inline-flex max-w-full min-w-0 items-center gap-2 font-mono text-xs text-ink-muted transition hover:text-signal"
         >
-          {@repository.canonical_url}
-          <.icon name="hero-arrow-up-right" class="size-4" />
+          <span class="min-w-0 break-all">{@repository.canonical_url}</span>
+          <.icon name="hero-arrow-up-right" class="size-4 shrink-0" />
         </a>
       </div>
 
       <div
         id="github-metadata"
-        class="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs text-ink-faint"
+        class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] text-ink-faint sm:gap-x-5 sm:text-xs"
       >
         <span :if={@repository.primary_language} class="inline-flex items-center gap-2">
           <span class="size-2 bg-signal"></span>
@@ -114,7 +111,7 @@ defmodule TarakanWeb.RepositoryComponents do
 
       <nav
         id="repository-navigation"
-        class="mt-5 flex items-end gap-1 border-b border-rule text-sm"
+        class="mt-5 flex items-end gap-0 overflow-x-auto overscroll-x-contain border-b border-rule text-sm [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Repository"
       >
         <.repository_tab
@@ -158,7 +155,7 @@ defmodule TarakanWeb.RepositoryComponents do
     <span
       id={@id}
       aria-current="page"
-      class="-mb-px inline-flex items-center gap-2 border-b-2 border-signal px-4 py-3 font-semibold text-ink"
+      class="-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-signal px-3 py-3 font-semibold text-ink sm:px-4"
     >
       <.icon name={@icon} class="size-4" /> {@label} {render_slot(@inner_block)}
     </span>
@@ -170,7 +167,7 @@ defmodule TarakanWeb.RepositoryComponents do
     <.link
       id={@id}
       navigate={@navigate}
-      class="-mb-px inline-flex items-center gap-2 border-b-2 border-transparent px-4 py-3 text-ink-muted transition hover:border-rule hover:text-ink"
+      class="-mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-3 text-ink-muted transition hover:border-rule hover:text-ink sm:px-4"
     >
       <.icon name={@icon} class="size-4" /> {@label} {render_slot(@inner_block)}
     </.link>
@@ -189,10 +186,15 @@ defmodule TarakanWeb.RepositoryComponents do
     _not_json -> raw_document
   end
 
-  @doc "Human-readable label for a review/task provenance capability."
-  def provenance_label("agent"), do: "Agent-generated"
-  def provenance_label("human"), do: "Human-authored"
-  def provenance_label("hybrid"), do: "Human-guided"
+  @doc """
+  Short label for who may do a job, or how a submission was made.
+
+  Hybrid is agent draft with a person in the loop — not a description of
+  Tarakan overall (the product is already human-owned).
+  """
+  def provenance_label("agent"), do: "Agent"
+  def provenance_label("human"), do: "Human"
+  def provenance_label("hybrid"), do: "Agent + human"
   def provenance_label(other), do: other
 
   @doc "Human-readable label for a review or task kind."
@@ -210,7 +212,7 @@ defmodule TarakanWeb.RepositoryComponents do
   Avoids the useless lone label \"findings\" once every repo has some.
   Prefers open/verified counts and clear/unreviewed states.
   """
-  def repository_status_label(%{status: "unscanned"}), do: "Not reviewed"
+  def repository_status_label(%{status: "unscanned"}), do: "No report"
 
   def repository_status_label(%{open_findings_count: open, verified_findings_count: verified})
       when is_integer(open) and open > 0 do
@@ -228,7 +230,7 @@ defmodule TarakanWeb.RepositoryComponents do
     do: "Clear"
 
   def repository_status_label(%{scan_count: n}) when is_integer(n) and n > 0, do: "Clear"
-  def repository_status_label(_repository), do: "Not reviewed"
+  def repository_status_label(_repository), do: "No report"
 
   defp repository_status_title(%{open_findings_count: open, verified_findings_count: verified})
        when is_integer(open) and open > 0 do
@@ -253,10 +255,10 @@ defmodule TarakanWeb.RepositoryComponents do
     do: "No public review on the record yet"
 
   defp repository_status_title(%{status: status}) when status in ["reviewed", "clear"],
-    do: "Reviewed with no open findings"
+    do: "Reported with no open findings"
 
   defp repository_status_title(%{scan_count: n}) when is_integer(n) and n > 0,
-    do: "Reviewed with no open findings"
+    do: "Reported with no open findings"
 
   defp repository_status_title(_repository), do: "No public review on the record yet"
 

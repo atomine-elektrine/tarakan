@@ -20,6 +20,25 @@
    Make the interaction contract consistent without repeating cursor utilities
    on every component and LiveView action. */
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    overflow-x: clip;
+  }
+
+  /* Prefer larger tap targets on coarse pointers without changing desktop. */
+  @media (pointer: coarse) {
+    button:not(:disabled),
+    a,
+    summary,
+    [role="button"] {
+      touch-action: manipulation;
+    }
+  }
+
   button:not(:disabled),
   input:is([type="button"], [type="submit"], [type="reset"]):not(:disabled) {
     cursor: pointer;
@@ -319,3 +338,5 @@
 .wire-badge.bg-btn .wire-badge-label {
   color: var(--btn-fg);
 }
+
+

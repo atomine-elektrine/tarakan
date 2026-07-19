@@ -118,11 +118,55 @@ const SearchShortcut = {
   },
 }
 
+const CopyLink = {
+  mounted() {
+    this.onClick = async () => {
+      const text = this.el.dataset.copyText
+      if (!text) return
+
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text)
+        } else {
+          const ta = document.createElement("textarea")
+          ta.value = text
+          ta.setAttribute("readonly", "")
+          ta.style.position = "fixed"
+          ta.style.left = "-9999px"
+          document.body.appendChild(ta)
+          ta.select()
+          document.execCommand("copy")
+          document.body.removeChild(ta)
+        }
+
+        const label = this.el.querySelector("[data-copy-label]")
+        if (label) {
+          const previous = label.textContent
+          label.textContent = this.el.dataset.copiedLabel || "Copied"
+          window.clearTimeout(this.resetTimer)
+          this.resetTimer = window.setTimeout(() => {
+            label.textContent = previous
+          }, 1600)
+        }
+      } catch (_err) {
+        // Silent: clipboard may be blocked; the visible cite URL remains.
+      }
+    }
+
+    this.el.addEventListener("click", this.onClick)
+  },
+
+  destroyed() {
+    this.el.removeEventListener("click", this.onClick)
+    window.clearTimeout(this.resetTimer)
+  },
+}
+
 const csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 const liveSocket = new LiveSocket("/live", Socket, {
   longPollFallbackMs: 2500,
   params: {_csrf_token: csrfToken},
-  hooks: {...colocatedHooks, AutoDismiss, PinToBottom, SearchShortcut},
+  hooks: {...colocatedHooks, AutoDismiss, PinToBottom, SearchShortcut, CopyLink},
 })
 
 // Show progress bar on live navigation and form submits

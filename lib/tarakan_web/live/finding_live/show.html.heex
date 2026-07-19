@@ -13,6 +13,9 @@
       <.notch_badge id="finding-severity" class="bg-signal text-ground">
         {@finding.severity}
       </.notch_badge>
+      <.notch_badge id="finding-disclosure-badge" class="bg-ink text-ground">
+        {TarakanWeb.FindingPresentation.disclosure_badge(@scan.visibility, @scan.provenance)}
+      </.notch_badge>
       <.notch_badge id="finding-trust-reported" class="text-ink-muted">
         Reported
       </.notch_badge>
@@ -52,14 +55,10 @@
       >
         {@finding.canonical_finding.status}
       </.notch_badge>
-      <span class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-        {review_kind_label(@scan.review_kind)}
-      </span>
-      <span
-        class="font-mono text-[10px] text-ink-faint"
-        title={@scan.review_status}
-      >
-        · {TarakanWeb.FindingPresentation.status_blurb(@scan.review_status)}
+      <span class="font-mono text-[11px] text-ink-faint" title={@scan.review_status}>
+        {review_kind_label(@scan.review_kind)} · {TarakanWeb.FindingPresentation.status_blurb(
+          @scan.review_status
+        )}
       </span>
       <span
         :if={@finding.canonical_finding}
@@ -88,21 +87,36 @@
       </h1>
     </div>
 
-    <%!-- Where + primary action --%>
-    <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="mt-4 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
       <.link
         id="finding-source-link"
         navigate={~p"/findings/#{@finding.public_id}/code"}
-        class="inline-flex items-center gap-1.5 border-2 border-strong bg-panel px-3 py-1.5 font-mono text-xs text-ink transition hover:border-signal hover:text-signal"
+        class="inline-flex max-w-full min-w-0 items-center gap-1.5 border-2 border-strong bg-panel px-3 py-2 font-mono text-xs text-ink transition hover:border-signal hover:text-signal"
         aria-label={"Open #{@finding.file_path} at the finding's pinned commit"}
       >
-        {@finding.file_path}{finding_lines(@finding)}
-        <.icon name="hero-arrow-right" class="size-3.5" />
+        <span class="min-w-0 break-all">
+          {@finding.file_path}{finding_lines(@finding)}
+        </span>
+        <.icon name="hero-arrow-right" class="size-3.5 shrink-0" />
       </.link>
       <span class="font-mono text-[11px] text-ink-faint" title={@scan.commit_sha}>
         @ {String.slice(@scan.commit_sha || "", 0, 7)}
       </span>
+      <button
+        id="finding-copy-link"
+        type="button"
+        phx-hook="CopyLink"
+        data-copy-text={@public_url}
+        data-copied-label="Copied"
+        class="inline-flex items-center gap-1.5 border-2 border-strong px-3 py-2 font-mono text-[11px] uppercase tracking-[0.12em] text-ink-muted transition hover:border-signal hover:text-signal"
+      >
+        <.icon name="hero-link" class="size-3.5" />
+        <span data-copy-label>Copy link</span>
+      </button>
     </div>
+    <p id="finding-cite" class="mt-2 max-w-3xl break-all font-mono text-[10px] text-ink-faint">
+      {@public_url}
+    </p>
 
     <%!-- What / why (main content) --%>
     <% structured = TarakanWeb.FindingPresentation.structure_description(@finding.description) %>
@@ -120,7 +134,7 @@
           :for={{label, body} <- structured.sections}
           class="border-2 border-strong bg-panel px-4 py-3"
         >
-          <h3 class="font-mono text-[10px] uppercase tracking-[0.16em] text-signal">
+          <h3 class="text-sm font-semibold text-ink">
             {label}
           </h3>
           <p class="mt-1.5 whitespace-pre-line text-sm leading-6 text-ink-muted" phx-no-format>{body}</p>
@@ -140,7 +154,7 @@
       </h2>
       <div class="mt-3 grid gap-px border-2 border-strong bg-rule sm:grid-cols-2 lg:grid-cols-4">
         <div class="bg-ground px-4 py-3">
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">Commit</p>
+          <p class="text-xs font-medium text-ink-faint">Commit</p>
           <p class="mt-1 font-mono text-sm tabular-nums text-ink" title={@scan.commit_sha}>
             {String.slice(@scan.commit_sha || "", 0, 12)}
           </p>
@@ -149,7 +163,7 @@
           </p>
         </div>
         <div class="bg-ground px-4 py-3">
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">How made</p>
+          <p class="text-xs font-medium text-ink-faint">How made</p>
           <p id="finding-provenance" class="mt-1 text-sm text-ink">
             {TarakanWeb.FindingPresentation.how_made_label(@scan.provenance)}
             <span class="text-ink-faint"> (claim)</span>
@@ -160,7 +174,7 @@
           </p>
         </div>
         <div class="bg-ground px-4 py-3">
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+          <p class="text-xs font-medium text-ink-faint">
             Submitted
           </p>
           <p class="mt-1 text-sm text-ink">
@@ -171,7 +185,7 @@
           </p>
         </div>
         <div class="bg-ground px-4 py-3">
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">Checks</p>
+          <p class="text-xs font-medium text-ink-faint">Checks</p>
           <p id="finding-verdict-counts" class="mt-1 font-mono text-sm text-ink">
             {@finding.canonical_finding.confirmations_count} confirmed · {@finding.canonical_finding.disputes_count} disputed
           </p>
@@ -200,7 +214,7 @@
           Disclosed {record_time(@scan.reviewed_at)}
         </p>
         <div :if={@scan.notes} class="max-w-3xl border border-rule bg-panel px-3 py-2">
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+          <p class="text-xs font-semibold text-ink-muted">
             Report summary
           </p>
           <% notes = TarakanWeb.FindingPresentation.humanize_notes(@scan.notes) %>
@@ -290,9 +304,9 @@
           id="finding-verdict"
           class="mt-5 border-2 border-strong bg-panel px-4 py-4"
         >
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+          <h3 class="text-sm font-semibold text-ink">
             Record a check
-          </p>
+          </h3>
           <form
             id="finding-verdict-form"
             phx-submit="record_finding_verdict"

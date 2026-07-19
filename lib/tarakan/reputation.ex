@@ -250,6 +250,7 @@ defmodule Tarakan.Reputation do
       |> select([stake, scan], %{
         amount: stake.amount,
         verified: not is_nil(scan.verified_at),
+        contested: scan.review_status == "contested" or scan.visibility == "restricted",
         net_disputes: scan.disputes_count - scan.confirmations_count,
         recent: scan.inserted_at > ^cutoff
       })
@@ -259,8 +260,8 @@ defmodule Tarakan.Reputation do
       cond do
         # Returned outright: a verified review's stake comes back.
         row.verified -> acc
-        # Slashed: refuted by a dispute quorum, with evidence, by qualified
-        # reviewers — the symmetric opposite of verification.
+        # Slashed: moderation takedown / contested label, or dispute quorum.
+        row.contested -> %{acc | slashed: acc.slashed + row.amount}
         row.net_disputes >= threshold -> %{acc | slashed: acc.slashed + row.amount}
         # Locked while it still might reach quorum, but only for the window.
         row.recent -> %{acc | at_risk: acc.at_risk + row.amount}

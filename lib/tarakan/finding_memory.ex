@@ -2,21 +2,31 @@ defmodule Tarakan.FindingMemory do
   @moduledoc """
   Assimilates immutable report findings into canonical repository issues.
 
-  Only exact deterministic fingerprints auto-link. Agent-provided dispositions
-  and canonical IDs are retained as hints but never override server matching.
+  Only deterministic fingerprints auto-link (no embeddings / LLM merge).
+  Matching is exact on normalized path + line_start + title. Agent-provided
+  dispositions and canonical IDs are retained as hints but never override
+  server matching.
+
+  Path/title normalization collapses common agent variants (`./path`,
+  confidence prefixes, punctuation). A legacy fingerprint is still consulted
+  so pre-existing canonical rows keep accumulating detections after upgrades.
   """
 
   import Ecto.Query, warn: false
 
+  alias Tarakan.Abuse
   alias Tarakan.Accounts
   alias Tarakan.Accounts.{Account, Scope}
+  alias Tarakan.ContentSafety
   alias Tarakan.Policy
   alias Tarakan.Repo
+  alias Tarakan.RepositoryPath
   alias Tarakan.Repositories.{Repository, RepositoryMembership}
   alias Tarakan.Scans.{CanonicalFinding, Finding, FindingCheck, Scan}
 
   @counting_provenances ~w(human hybrid)
   @verification_threshold 2
+  @quorum_states ["active"]
 
   @doc "Links every finding in a newly inserted scan to canonical memory."
   def assimilate_scan(%Scan{} = scan) do
@@ -62,13 +72,52 @@ defmodule Tarakan.FindingMemory do
     Repo.preload(scan, [findings: :canonical_finding], force: true)
   end
 
-  @doc "A stable exact-match fingerprint for a normalized finding occurrence."
-  def fingerprint(%{file_path: path, line_start: line_start, line_end: line_end, title: title}) do
-    [normalize(path), number(line_start), number(line_end), normalize(title)]
-    |> Enum.join(<<31>>)
+  @doc """
+  Stable fingerprint for a normalized finding occurrence.
+
+  Uses repository-relative path (canonicalized), **line_start only** (line_end
+  is display/range noise across agents), and normalized title.
+  """
+  def fingerprint(%{file_path: path, line_start: line_start, title: title}) do
+    hash_parts([
+      normalize_path(path),
+      number(line_start),
+      normalize_title(title)
+    ])
+  end
+
+  @doc false
+  # Frozen v1 algorithm (path + start + end + title) for upgrade lookup only.
+  def legacy_fingerprint(%{
+        file_path: path,
+        line_start: line_start,
+        line_end: line_end,
+        title: title
+      }) do
+    hash_parts([
+      legacy_normalize(path),
+      number(line_start),
+      number(line_end),
+      legacy_normalize(title)
+    ])
+  end
+
+  @doc """
+  Cross-repository epidemic key: normalized title only.
+
+  Same class of issue in different repos/paths share a pattern_key even when
+  the full fingerprint differs.
+  """
+  def pattern_key(%{title: title}), do: pattern_key(title)
+
+  def pattern_key(title) when is_binary(title) do
+    title
+    |> normalize_title()
     |> then(&:crypto.hash(:sha256, &1))
     |> Base.encode16(case: :lower)
   end
+
+  def pattern_key(_), do: pattern_key("")
 
   @doc "Lists prompt-safe canonical memory backed by publicly disclosed occurrences."
   def list_repository_memory(%Repository{id: repository_id}, opts \\ []) do
@@ -115,7 +164,7 @@ defmodule Tarakan.FindingMemory do
         trust: trust_summary(canonical, last_sha)
       }
     end)
-    |> Enum.sort_by(&{status_rank(&1.status), -&1.detections_count, &1.file_path})
+    |> Enum.sort_by(&evidence_sort_key/1)
   end
 
   @doc "Finds one canonical issue by its non-enumerable public ID."
@@ -178,13 +227,25 @@ defmodule Tarakan.FindingMemory do
           {:error, reason} -> Repo.rollback(reason)
         end
 
+        check_attrs =
+          attrs
+          |> Map.put("client_ip_hash", Abuse.hash_client_ip(attrs["client_ip"]))
+          |> Map.delete("client_ip")
+
+        with :ok <- ContentSafety.scan_text(check_attrs["notes"]),
+             :ok <- ContentSafety.scan_text(check_attrs["evidence"]) do
+          :ok
+        else
+          {:error, :secrets_detected} -> Repo.rollback(:secrets_detected)
+        end
+
         check =
           %FindingCheck{
             canonical_finding_id: canonical.id,
             scan_finding_id: occurrence.id,
             account_id: fresh_account.id
           }
-          |> FindingCheck.changeset(attrs)
+          |> FindingCheck.changeset(check_attrs)
 
         case Repo.insert(check) do
           {:ok, inserted} ->
@@ -199,7 +260,16 @@ defmodule Tarakan.FindingMemory do
       |> case do
         {:ok, check} ->
           refresh_scans_for_check(canonical.id, check.commit_sha)
-          {:ok, check, Repo.get!(CanonicalFinding, canonical.id)}
+          updated = Repo.get!(CanonicalFinding, canonical.id)
+
+          if is_binary(updated.pattern_key) and updated.pattern_key != "" do
+            _ =
+              Tarakan.Epidemics.schedule_refresh_after_commit([updated.pattern_key],
+                reason: :status
+              )
+          end
+
+          {:ok, check, updated}
 
         {:error, reason} ->
           {:error, reason}
@@ -247,16 +317,16 @@ defmodule Tarakan.FindingMemory do
             membership.role in ["reviewer", "steward"],
         where: check.canonical_finding_id == ^canonical_id and check.commit_sha == ^commit_sha,
         order_by: [desc: check.inserted_at, desc: check.id],
-        select: {
+        select: {check, account, membership}
+    )
+    |> Enum.map(fn {check, account, membership} ->
+      counts? =
+        check_counts_toward_quorum?(
           check,
           account,
-          check.provenance in ^@counting_provenances and
-            account.state in ["probation", "active"] and
-            (account.trust_tier == "reviewer" or
-               account.platform_role in ["moderator", "admin"] or not is_nil(membership.id))
-        }
-    )
-    |> Enum.map(fn {check, account, counts_toward_quorum} ->
+          membership
+        )
+
       %{
         id: check.id,
         verdict: check.verdict,
@@ -265,7 +335,7 @@ defmodule Tarakan.FindingMemory do
         evidence: check.evidence,
         inserted_at: check.inserted_at,
         account: account,
-        counts_toward_quorum: counts_toward_quorum
+        counts_toward_quorum: counts?
       }
     end)
   end
@@ -403,27 +473,64 @@ defmodule Tarakan.FindingMemory do
   end
 
   defp upsert_canonical(scan, occurrence, fingerprint) do
-    attrs = %{
-      repository_id: scan.repository_id,
-      fingerprint: fingerprint,
-      file_path: occurrence.file_path,
-      line_start: occurrence.line_start,
-      line_end: occurrence.line_end,
-      severity: occurrence.severity,
-      title: occurrence.title,
-      description: occurrence.description,
-      first_seen_commit_sha: scan.commit_sha,
-      last_seen_commit_sha: scan.commit_sha
-    }
+    pattern = pattern_key(occurrence)
 
-    %CanonicalFinding{}
-    |> CanonicalFinding.changeset(attrs)
-    |> Repo.insert(
-      on_conflict: :nothing,
-      conflict_target: [:repository_id, :fingerprint]
-    )
+    case get_canonical(scan.repository_id, fingerprint) ||
+           upgrade_legacy_canonical(scan.repository_id, occurrence, fingerprint, pattern) do
+      %CanonicalFinding{} = existing ->
+        existing
 
-    Repo.get_by!(CanonicalFinding, repository_id: scan.repository_id, fingerprint: fingerprint)
+      nil ->
+        attrs = %{
+          repository_id: scan.repository_id,
+          fingerprint: fingerprint,
+          pattern_key: pattern,
+          file_path: occurrence.file_path,
+          line_start: occurrence.line_start,
+          line_end: occurrence.line_end,
+          severity: occurrence.severity,
+          title: occurrence.title,
+          description: occurrence.description,
+          first_seen_commit_sha: scan.commit_sha,
+          last_seen_commit_sha: scan.commit_sha
+        }
+
+        %CanonicalFinding{}
+        |> CanonicalFinding.changeset(attrs)
+        |> Repo.insert(
+          on_conflict: {:replace, [:pattern_key]},
+          conflict_target: [:repository_id, :fingerprint]
+        )
+
+        get_canonical(scan.repository_id, fingerprint) ||
+          Repo.get_by!(CanonicalFinding,
+            repository_id: scan.repository_id,
+            fingerprint: fingerprint
+          )
+    end
+  end
+
+  defp get_canonical(repository_id, fingerprint) do
+    Repo.get_by(CanonicalFinding, repository_id: repository_id, fingerprint: fingerprint)
+  end
+
+  # If an older report created a v1 fingerprint, re-key it to v2 so new reports merge.
+  defp upgrade_legacy_canonical(repository_id, occurrence, fingerprint, pattern) do
+    legacy = legacy_fingerprint(occurrence)
+
+    if legacy == fingerprint do
+      nil
+    else
+      case get_canonical(repository_id, legacy) do
+        %CanonicalFinding{} = existing ->
+          existing
+          |> Ecto.Changeset.change(fingerprint: fingerprint, pattern_key: pattern)
+          |> Repo.update!()
+
+        nil ->
+          nil
+      end
+    end
   end
 
   defp refresh_canonical(canonical_id) do
@@ -487,8 +594,9 @@ defmodule Tarakan.FindingMemory do
   defp refresh_canonical_checks(canonical_id) do
     canonical = Repo.get!(CanonicalFinding, canonical_id)
 
-    tallies =
-      Repo.one!(
+    # Load candidate checks then filter collusion in Elixir (IP hash rules).
+    candidates =
+      Repo.all(
         from check in FindingCheck,
           join: account in Account,
           on: account.id == check.account_id,
@@ -501,15 +609,20 @@ defmodule Tarakan.FindingMemory do
             check.canonical_finding_id == ^canonical.id and
               check.commit_sha == ^canonical.last_seen_commit_sha and
               check.provenance in ^@counting_provenances and
-              account.state in ["probation", "active"] and
+              account.state in ^@quorum_states and
               (account.trust_tier == "reviewer" or
                  account.platform_role in ["moderator", "admin"] or not is_nil(membership.id)),
-          select: %{
-            confirmed: count(check.id) |> filter(check.verdict == "confirmed"),
-            disputed: count(check.id) |> filter(check.verdict == "disputed"),
-            fixed: count(check.id) |> filter(check.verdict == "fixed")
-          }
+          select: check
       )
+      |> Enum.reject(fn check ->
+        Abuse.colluding_ip_check?(canonical.id, check.account_id, check.client_ip_hash)
+      end)
+
+    tallies = %{
+      confirmed: Enum.count(candidates, &(&1.verdict == "confirmed")),
+      disputed: Enum.count(candidates, &(&1.verdict == "disputed")),
+      fixed: Enum.count(candidates, &(&1.verdict == "fixed"))
+    }
 
     {status, verified_at} =
       cond do
@@ -549,20 +662,39 @@ defmodule Tarakan.FindingMemory do
         where:
           check.canonical_finding_id in ^canonical_ids and check.commit_sha == ^commit_sha and
             check.provenance in ^@counting_provenances and
-            account.state in ["probation", "active"] and
+            account.state in ^@quorum_states and
             (account.trust_tier == "reviewer" or
                account.platform_role in ["moderator", "admin"] or not is_nil(membership.id)),
-        group_by: check.canonical_finding_id,
-        select: {
-          check.canonical_finding_id,
-          %{
-            confirmed: count(check.id) |> filter(check.verdict == "confirmed"),
-            disputed: count(check.id) |> filter(check.verdict == "disputed"),
-            fixed: count(check.id) |> filter(check.verdict == "fixed")
-          }
-        }
+        select: check
     )
-    |> Map.new()
+    |> Enum.reject(fn check ->
+      Abuse.colluding_ip_check?(
+        check.canonical_finding_id,
+        check.account_id,
+        check.client_ip_hash
+      )
+    end)
+    |> Enum.group_by(& &1.canonical_finding_id)
+    |> Map.new(fn {canonical_id, checks} ->
+      {canonical_id,
+       %{
+         confirmed: Enum.count(checks, &(&1.verdict == "confirmed")),
+         disputed: Enum.count(checks, &(&1.verdict == "disputed")),
+         fixed: Enum.count(checks, &(&1.verdict == "fixed"))
+       }}
+    end)
+  end
+
+  defp check_counts_toward_quorum?(check, account, membership) do
+    check.provenance in @counting_provenances and
+      account.state in @quorum_states and
+      (account.trust_tier == "reviewer" or
+         account.platform_role in ["moderator", "admin"] or not is_nil(membership)) and
+      not Abuse.colluding_ip_check?(
+        check.canonical_finding_id,
+        check.account_id,
+        check.client_ip_hash
+      )
   end
 
   defp refresh_scans_for_check(canonical_id, commit_sha) do
@@ -681,12 +813,48 @@ defmodule Tarakan.FindingMemory do
     if checked?, do: {:error, :already_checked}, else: :ok
   end
 
-  defp normalize(value) do
+  defp hash_parts(parts) do
+    parts
+    |> Enum.join(<<31>>)
+    |> then(&:crypto.hash(:sha256, &1))
+    |> Base.encode16(case: :lower)
+  end
+
+  defp normalize_path(path), do: RepositoryPath.fingerprint_form(path)
+
+  # Aggressive normalize so near-duplicate agent dumps assimilate (spam collapse).
+  defp normalize_title(value) do
     value
     |> to_string()
-    |> String.trim()
     |> String.downcase()
+    |> strip_confidence_prefixes()
+    |> String.replace(~r/[^\p{L}\p{N}\s\/\.\-_]/u, " ")
     |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+    |> String.trim_trailing(".")
+  end
+
+  # Frozen copy of the pre-v2 title/path normalizer for legacy fingerprints.
+  defp legacy_normalize(value) do
+    value
+    |> to_string()
+    |> String.downcase()
+    |> String.replace(
+      ~r/^(verified|hypothesis(?:\/low)?|unverified|likely|possible|confirmed)\s*:\s*/iu,
+      ""
+    )
+    |> String.replace(~r/[^\p{L}\p{N}\s\/\.\-_]/u, " ")
+    |> String.replace(~r/\s+/u, " ")
+    |> String.trim()
+  end
+
+  defp strip_confidence_prefixes(title) do
+    # Repeatedly strip agent boilerplate so "Verified: Likely: X" collapses.
+    prefixes =
+      ~r/^(?:verified|hypothesis(?:\/low)?|unverified|likely|possible|confirmed|warning|error|critical|high|medium|low|info|cwe[-\s]?\d+)\s*:\s*/iu
+
+    next = String.replace(title, prefixes, "")
+    if next == title, do: title, else: strip_confidence_prefixes(next)
   end
 
   defp number(nil), do: ""
@@ -694,9 +862,45 @@ defmodule Tarakan.FindingMemory do
 
   defp stringify_keys(attrs), do: Map.new(attrs, fn {key, value} -> {to_string(key), value} end)
 
-  defp status_rank("open"), do: 0
-  defp status_rank("disputed"), do: 1
-  defp status_rank("verified"), do: 2
-  defp status_rank("fixed"), do: 3
-  defp status_rank(_status), do: 4
+  # Lower sorts first: verified, then checked, then open, then fixed.
+  defp evidence_sort_key(finding) do
+    trust = finding.trust || %{}
+
+    tier =
+      cond do
+        finding.status == "verified" or trust[:verified] == true ->
+          0
+
+        trust[:human_checked] == true ->
+          1
+
+        finding.status == "open" and trust[:agent_reproduced] == true and
+            trust[:agent_disputed] != true ->
+          2
+
+        finding.status == "open" ->
+          3
+
+        finding.status == "disputed" or trust[:disputed] == true ->
+          4
+
+        finding.status == "fixed" or trust[:fixed] == true ->
+          5
+
+        true ->
+          6
+      end
+
+    severity_rank =
+      case finding.severity do
+        "critical" -> 0
+        "high" -> 1
+        "medium" -> 2
+        "low" -> 3
+        _ -> 4
+      end
+
+    {tier, severity_rank, -(finding.confirmations_count || 0), -(finding.detections_count || 0),
+     finding.file_path || ""}
+  end
 end

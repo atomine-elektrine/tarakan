@@ -12,9 +12,11 @@ defmodule Tarakan.Scans do
   import Ecto.Query, warn: false
 
   alias Ecto.Multi
+  alias Tarakan.Abuse
   alias Tarakan.Accounts
   alias Tarakan.Accounts.{Account, Scope}
   alias Tarakan.Audit
+  alias Tarakan.ContentSafety
   alias Tarakan.GitHub
   alias Tarakan.FindingMemory
   alias Tarakan.Moderation.Holds
@@ -27,6 +29,7 @@ defmodule Tarakan.Scans do
   @verification_threshold 2
   @counting_provenances ~w(human hybrid)
   @public_visibilities ~w(public_summary public)
+  @quorum_states ["active"]
 
   @doc """
   Subscribes the caller to a repository's review record.
@@ -95,6 +98,12 @@ defmodule Tarakan.Scans do
       {:ok, {updated_scans, updated_repository}} ->
         Enum.each(updated_scans, &broadcast_refresh/1)
         Repositories.broadcast_record_updated(updated_repository)
+
+        _ =
+          Tarakan.Epidemics.schedule_refresh_for_repository_after_commit(repository_id,
+            reason: :status
+          )
+
         {:ok, updated_repository}
 
       {:error, reason} ->
@@ -223,16 +232,63 @@ defmodule Tarakan.Scans do
   finding bodies and are never included.
   """
   def list_indexable_findings do
-    Finding
-    |> join(:inner, [finding], scan in assoc(finding, :scan))
-    |> join(:inner, [finding, scan], repository in assoc(scan, :repository))
-    |> where(
-      [finding, scan, repository],
-      repository.listing_status == "listed" and scan.visibility == "public"
+    stream_indexable_findings() |> Enum.to_list()
+  end
+
+  @doc "Cursor page of publicly indexable findings (id ascending)."
+  def list_indexable_findings_page(opts \\ []) do
+    limit = opts |> Keyword.get(:limit, 1_000) |> max(1) |> min(5_000)
+    after_id = Keyword.get(opts, :after_id, 0)
+
+    rows =
+      Finding
+      |> join(:inner, [finding], scan in assoc(finding, :scan))
+      |> join(:inner, [finding, scan], repository in assoc(scan, :repository))
+      |> join(:left, [finding], canonical in assoc(finding, :canonical_finding))
+      |> where(
+        [finding, scan, repository],
+        repository.listing_status == "listed" and scan.visibility == "public" and
+          finding.id > ^after_id
+      )
+      |> order_by([finding], asc: finding.id)
+      |> limit(^limit)
+      |> select([finding, _scan, _repository, canonical], %{
+        id: finding.id,
+        public_id: finding.public_id,
+        updated_at: finding.updated_at,
+        verified: canonical.status == "verified",
+        confirmations_count: fragment("COALESCE(?, 0)", canonical.confirmations_count)
+      })
+      |> Repo.all()
+
+    next_after_id =
+      case List.last(rows) do
+        %{id: id} -> id
+        _ -> nil
+      end
+
+    %{findings: rows, next_after_id: next_after_id}
+  end
+
+  @doc "Lazy stream of indexable findings. Never materializes the full set."
+  def stream_indexable_findings(opts \\ []) do
+    Stream.resource(
+      fn -> 0 end,
+      fn
+        nil ->
+          {:halt, nil}
+
+        after_id ->
+          %{findings: rows, next_after_id: next} =
+            list_indexable_findings_page(Keyword.merge(opts, after_id: after_id, limit: 1_000))
+
+          case rows do
+            [] -> {:halt, nil}
+            _ -> {rows, next}
+          end
+      end,
+      fn _ -> :ok end
     )
-    |> order_by([finding], asc: finding.id)
-    |> select([finding], %{public_id: finding.public_id, updated_at: finding.updated_at})
-    |> Repo.all()
   end
 
   @doc """
@@ -301,7 +357,8 @@ defmodule Tarakan.Scans do
       |> maybe_put_optional(:source_request_id, attrs)
       |> maybe_put_optional(:commit_committed_at, attrs)
 
-    with {:ok, changeset} <- validate_submission(changeset) do
+    with :ok <- ContentSafety.scan_submission(attrs),
+         {:ok, changeset} <- validate_submission(changeset) do
       case Repo.insert(changeset) do
         {:ok, scan} -> {:ok, FindingMemory.assimilate_scan(scan)}
         {:error, %Ecto.Changeset{} = failed} -> {:error, %{failed | action: :insert}}
@@ -372,10 +429,15 @@ defmodule Tarakan.Scans do
         subject = %{locked_scan | repository: repository}
 
         with :ok <- Policy.authorize(scope, :verify_review, subject),
-             :ok <- ensure_not_submitter(locked_scan, account) do
+             :ok <- ensure_not_submitter(locked_scan, account),
+             :ok <- ContentSafety.scan_text(Map.get(attrs, "notes") || Map.get(attrs, :notes)),
+             :ok <-
+               ContentSafety.scan_text(Map.get(attrs, "evidence") || Map.get(attrs, :evidence)) do
+          confirm_attrs = normalize_confirmation_attrs(attrs)
+
           changeset =
             %Confirmation{scan_id: locked_scan.id, account_id: account.id}
-            |> Confirmation.changeset(attrs)
+            |> Confirmation.changeset(confirm_attrs)
 
           case Repo.insert(changeset) do
             {:ok, confirmation} ->
@@ -448,18 +510,6 @@ defmodule Tarakan.Scans do
   end
 
   @doc """
-  Whether `scope` can record an independent verdict on `scan`: qualified,
-  not the submitter, and not already on the record. Expects `confirmations`
-  to be preloaded.
-  """
-  def can_record_verdict?(%Scope{account: %Account{} = account} = scope, %Scan{} = scan) do
-    Policy.allowed?(scope, :verify_review, scan) and scan.submitted_by_id != account.id and
-      not Enum.any?(scan.confirmations, &(&1.account_id == account.id))
-  end
-
-  def can_record_verdict?(_scope, _scan), do: false
-
-  @doc """
   Records an attributable verification verdict.
 
   Submitters cannot review their own work. A human or hybrid verdict includes
@@ -521,7 +571,8 @@ defmodule Tarakan.Scans do
       |> Ecto.Changeset.put_change(:review_status, "quarantined")
       |> Ecto.Changeset.put_change(:visibility, "public")
 
-    with {:ok, pre_changeset} <- validate_submission(pre_changeset),
+    with :ok <- ContentSafety.scan_submission(attrs),
+         {:ok, pre_changeset} <- validate_submission(pre_changeset),
          {:ok, commit} <- verify_commit(repository, pre_changeset) do
       insert_attrs =
         attrs
@@ -562,10 +613,19 @@ defmodule Tarakan.Scans do
       end)
       |> Repo.transaction()
       |> case do
-        {:ok, %{scan: scan}} ->
+        {:ok, %{scan: scan, locked_repository: before_repo, repository: after_repo}} ->
           scan = preload_record(scan)
           broadcast_review_submitted(scan)
           _ = Tarakan.Work.maybe_open_agent_verification_job(scan)
+          _ = Tarakan.Epidemics.schedule_refresh_for_scan_after_commit(scan, reason: :assimilate)
+
+          if before_repo.listing_status != after_repo.listing_status do
+            _ =
+              Tarakan.Epidemics.schedule_refresh_for_repository_after_commit(scan.repository_id,
+                reason: :listing_change
+              )
+          end
+
           {:ok, scan}
 
         {:error, :scan, changeset, _changes} ->
@@ -578,11 +638,19 @@ defmodule Tarakan.Scans do
   end
 
   defp do_record_confirmation(scope, scan_id, account, attrs) do
+    attrs = normalize_confirmation_attrs(attrs)
+
     changeset =
       %Confirmation{scan_id: scan_id, account_id: account.id}
       |> Confirmation.changeset(attrs)
 
     Multi.new()
+    |> Multi.run(:content_safety, fn _repo, _changes ->
+      with :ok <- ContentSafety.scan_text(attrs["notes"]),
+           :ok <- ContentSafety.scan_text(attrs["evidence"]) do
+        {:ok, :clean}
+      end
+    end)
     |> Multi.run(:locked_repository, fn repo, _changes ->
       lock_repository_for_scan(repo, scan_id)
     end)
@@ -657,6 +725,9 @@ defmodule Tarakan.Scans do
             fresh_scope.account
           )
         end
+
+        _ =
+          Tarakan.Epidemics.schedule_refresh_for_scan_after_commit(updated_scan, reason: :status)
 
         {:ok, updated_scan}
 
@@ -746,6 +817,26 @@ defmodule Tarakan.Scans do
               updated_repository,
               updated_scan.submitted_by
             )
+          end
+
+          visibility_changed? = previous_scan.visibility != updated_scan.visibility
+
+          listing_changed? =
+            previous_repository.listing_status != updated_repository.listing_status
+
+          if visibility_changed? do
+            _ =
+              Tarakan.Epidemics.schedule_refresh_for_scan_after_commit(updated_scan,
+                reason: :visibility
+              )
+          end
+
+          if listing_changed? do
+            _ =
+              Tarakan.Epidemics.schedule_refresh_for_repository_after_commit(
+                updated_scan.repository_id,
+                reason: :listing_change
+              )
           end
 
           {:ok, updated_scan}
@@ -851,16 +942,16 @@ defmodule Tarakan.Scans do
   defp scan_submission_limit(%Account{platform_role: role}) when role in ["moderator", "admin"],
     do: 10_000
 
-  defp scan_submission_limit(%Account{trust_tier: "reviewer"}), do: 250
-  defp scan_submission_limit(%Account{state: "active"}), do: 50
-  defp scan_submission_limit(%Account{}), do: 5
+  defp scan_submission_limit(%Account{trust_tier: "reviewer"}), do: 100
+  defp scan_submission_limit(%Account{state: "active"}), do: 30
+  defp scan_submission_limit(%Account{}), do: 3
 
   defp scan_submission_preflight(
          %Scope{account_id: account_id},
          %Repository{id: repository_id}
        ) do
-    with :ok <- rate_check({:scan_submission_account, account_id}, 20, 60),
-         :ok <- rate_check({:scan_submission, account_id, repository_id}, 10, 60) do
+    with :ok <- rate_check({:scan_submission_account, account_id}, 10, 60),
+         :ok <- rate_check({:scan_submission, account_id, repository_id}, 5, 60) do
       :ok
     end
   end
@@ -948,10 +1039,11 @@ defmodule Tarakan.Scans do
   defp verify_disclosure_identity(_scan, _requested_status, _attrs), do: :ok
 
   # Tallies are recalculated from immutable verdict rows. Only human and hybrid
-  # verification counts; agent-only agreement is never a quorum vote.
+  # verification from aged active accounts counts; agent-only agreement never
+  # satisfies quorum. Same-IP collusion across accounts is withheld from quorum.
   defp retally_scan(repo, scan) do
-    tallies =
-      repo.one(
+    candidates =
+      repo.all(
         from confirmation in Confirmation,
           join: account in Account,
           on: account.id == confirmation.account_id,
@@ -963,14 +1055,23 @@ defmodule Tarakan.Scans do
           where:
             confirmation.scan_id == ^scan.id and
               confirmation.provenance in ^@counting_provenances and
-              account.state in ["probation", "active"] and
+              account.state in ^@quorum_states and
               (account.trust_tier == "reviewer" or
                  account.platform_role in ["moderator", "admin"] or not is_nil(membership.id)),
-          select: %{
-            confirmed: count(confirmation.id) |> filter(confirmation.verdict == "confirmed"),
-            disputed: count(confirmation.id) |> filter(confirmation.verdict == "disputed")
-          }
+          select: confirmation
       )
+      |> Enum.reject(fn confirmation ->
+        Abuse.colluding_ip_confirmation?(
+          scan.id,
+          confirmation.account_id,
+          confirmation.client_ip_hash
+        )
+      end)
+
+    tallies = %{
+      confirmed: Enum.count(candidates, &(&1.verdict == "confirmed")),
+      disputed: Enum.count(candidates, &(&1.verdict == "disputed"))
+    }
 
     verified_at =
       if tallies.confirmed - tallies.disputed >= @verification_threshold do
@@ -993,6 +1094,15 @@ defmodule Tarakan.Scans do
       end
 
     repo.update(changeset)
+  end
+
+  defp normalize_confirmation_attrs(attrs) when is_map(attrs) do
+    attrs
+    |> stringify_keys()
+    |> then(fn map ->
+      Map.put(map, "client_ip_hash", Abuse.hash_client_ip(map["client_ip"]))
+    end)
+    |> Map.delete("client_ip")
   end
 
   # Public aggregates follow visibility: every non-restricted review counts

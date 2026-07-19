@@ -64,10 +64,8 @@ defmodule TarakanWeb.RepositoryLive.Show do
      |> assign(:can_auto_open_job, can_auto_open_job?(socket, repository))
      |> assign(:moderation_form, moderation_form())
      |> assign(:can_vote, can_vote?(socket))
-     |> assign(
-       :canonical_findings,
-       canonical_findings(repository, socket.assigns.current_scope, current_account_id(socket))
-     )
+     |> assign(:canonical_findings, [])
+     |> assign(:checkable_findings_count, 0)
      |> stream(:tasks, Work.list_tasks(repository, scope: socket.assigns.current_scope))
      |> load_scans()}
   end
@@ -299,41 +297,75 @@ defmodule TarakanWeb.RepositoryLive.Show do
         %{assigns: %{current_scope: %{account: account}}} = socket
       )
       when not is_nil(account) do
-    attrs = %{
-      "commit_sha" => commit_sha,
-      "verdict" => verdict,
-      "provenance" => "human",
-      "notes" => notes
-    }
-
-    case FindingMemory.record_check(
-           socket.assigns.current_scope,
-           socket.assigns.repository,
-           public_id,
-           attrs
-         ) do
-      {:ok, _check, _canonical} ->
+    case apply_finding_check(socket, public_id, commit_sha, verdict, notes) do
+      :ok ->
         {:noreply,
          socket
          |> reload_repository()
          |> load_scans()
          |> put_flash(:info, "Finding check recorded.")}
 
-      {:error, :conflict_of_interest} ->
-        {:noreply, put_flash(socket, :error, "You cannot verify a finding you submitted.")}
-
-      {:error, :unauthorized} ->
-        {:noreply, put_flash(socket, :error, "You are not authorized to verify this finding.")}
-
-      {:error, %Ecto.Changeset{errors: [{_field, {message, _meta}} | _]}} ->
-        {:noreply, put_flash(socket, :error, "Finding check not recorded: #{message}.")}
-
-      {:error, _reason} ->
-        {:noreply, put_flash(socket, :error, "Finding check could not be recorded.")}
+      {:error, message} ->
+        {:noreply, put_flash(socket, :error, message)}
     end
   end
 
   def handle_event("record_finding_verdict", _params, socket) do
+    {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
+  end
+
+  def handle_event(
+        "bulk_check_findings",
+        %{"verdict" => verdict, "notes" => notes},
+        %{assigns: %{current_scope: %{account: account}}} = socket
+      )
+      when not is_nil(account) and verdict in ["confirmed", "disputed", "fixed"] do
+    notes = notes |> to_string() |> String.trim()
+
+    if String.length(notes) < 20 do
+      {:noreply, put_flash(socket, :error, "Notes need at least 20 characters.")}
+    else
+      targets =
+        socket.assigns.canonical_findings
+        |> Enum.filter(& &1.can_check)
+        |> Enum.map(fn finding ->
+          {finding.public_id, finding.last_seen_commit_sha}
+        end)
+
+      {ok, fail} =
+        Enum.reduce(targets, {0, 0}, fn {public_id, commit_sha}, {ok, fail} ->
+          case apply_finding_check(socket, public_id, commit_sha, verdict, notes) do
+            :ok -> {ok + 1, fail}
+            {:error, _} -> {ok, fail + 1}
+          end
+        end)
+
+      socket =
+        socket
+        |> reload_repository()
+        |> load_scans()
+
+      msg =
+        cond do
+          ok == 0 and fail == 0 ->
+            "No findings available to check."
+
+          fail == 0 ->
+            "Recorded #{ok} finding check#{if ok == 1, do: "", else: "s"}."
+
+          ok == 0 ->
+            "Could not record any finding checks."
+
+          true ->
+            "Recorded #{ok} check#{if ok == 1, do: "", else: "s"}; #{fail} failed."
+        end
+
+      flash = if ok > 0, do: :info, else: :error
+      {:noreply, put_flash(socket, flash, msg)}
+    end
+  end
+
+  def handle_event("bulk_check_findings", _params, socket) do
     {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
   end
 
@@ -345,6 +377,13 @@ defmodule TarakanWeb.RepositoryLive.Show do
       when not is_nil(account) do
     with_recent_auth(socket, fn ->
       with {:ok, scan} <- Scans.get_scan(socket.assigns.current_scope, scan_id) do
+        # Reason codes are machine labels for the audit log. The decision button
+        # picks them — moderators only write evidence notes in the UI.
+        attrs =
+          attrs
+          |> stringify_moderation_attrs()
+          |> Map.put("moderation_reason", default_moderation_reason(decision))
+
         result =
           case decision do
             "accept" ->
@@ -387,7 +426,7 @@ defmodule TarakanWeb.RepositoryLive.Show do
             {:noreply,
              socket
              |> assign(:moderation_form, to_form(changeset, as: :moderation))
-             |> put_flash(:error, "Decision needs a reason and evidence.")}
+             |> put_flash(:error, "Add evidence notes (20+ characters).")}
 
           {:error, _reason} ->
             {:noreply, put_flash(socket, :error, "Review decision could not be recorded.")}
@@ -403,6 +442,37 @@ defmodule TarakanWeb.RepositoryLive.Show do
     {:noreply, redirect(socket, to: ~p"/accounts/log-in")}
   end
 
+  defp apply_finding_check(socket, public_id, commit_sha, verdict, notes) do
+    attrs = %{
+      "commit_sha" => commit_sha,
+      "verdict" => verdict,
+      "provenance" => "human",
+      "notes" => notes
+    }
+
+    case FindingMemory.record_check(
+           socket.assigns.current_scope,
+           socket.assigns.repository,
+           public_id,
+           attrs
+         ) do
+      {:ok, _check, _canonical} ->
+        :ok
+
+      {:error, :conflict_of_interest} ->
+        {:error, "You cannot verify a finding you submitted."}
+
+      {:error, :unauthorized} ->
+        {:error, "You are not authorized to verify this finding."}
+
+      {:error, %Ecto.Changeset{errors: [{_field, {message, _meta}} | _]}} ->
+        {:error, "Finding check not recorded: #{message}."}
+
+      {:error, _reason} ->
+        {:error, "Finding check could not be recorded."}
+    end
+  end
+
   defp reload_repository(socket) do
     %{host: host, owner: owner, name: name} = socket.assigns.repository
     assign(socket, :repository, Repositories.get_repository(host, owner, name))
@@ -416,18 +486,19 @@ defmodule TarakanWeb.RepositoryLive.Show do
         push_navigate(socket, to: ~p"/")
 
       repository ->
-        scans = Scans.list_scans(socket.assigns.current_scope, repository)
-
-        socket
-        |> assign(:repository, repository)
-        |> assign(
-          :canonical_findings,
+        findings =
           canonical_findings(
             repository,
             socket.assigns.current_scope,
             current_account_id(socket)
           )
-        )
+
+        scans = Scans.list_scans(socket.assigns.current_scope, repository)
+
+        socket
+        |> assign(:repository, repository)
+        |> assign(:canonical_findings, findings)
+        |> assign(:checkable_findings_count, Enum.count(findings, & &1.can_check))
         |> stream(:tasks, Work.list_tasks(repository, scope: socket.assigns.current_scope),
           reset: true
         )
@@ -446,15 +517,16 @@ defmodule TarakanWeb.RepositoryLive.Show do
   defp load_scans(socket) do
     scans = Scans.list_scans(socket.assigns.current_scope, socket.assigns.repository)
 
-    socket
-    |> assign(
-      :canonical_findings,
+    findings =
       canonical_findings(
         socket.assigns.repository,
         socket.assigns.current_scope,
         current_account_id(socket)
       )
-    )
+
+    socket
+    |> assign(:canonical_findings, findings)
+    |> assign(:checkable_findings_count, Enum.count(findings, & &1.can_check))
     |> assign(:task_target_options, task_target_options(scans))
     |> stream(:scans, scans, reset: true)
   end
@@ -657,6 +729,21 @@ defmodule TarakanWeb.RepositoryLive.Show do
     )
   end
 
+  defp stringify_moderation_attrs(attrs) when is_map(attrs) do
+    Map.new(attrs, fn {k, v} -> {to_string(k), v} end)
+  end
+
+  defp stringify_moderation_attrs(_), do: %{}
+
+  # Stored on the scan for audit/activity feeds. Not a user-facing concept.
+  defp default_moderation_reason("accept"), do: "evidence_reviewed"
+  defp default_moderation_reason("reject"), do: "evidence_insufficient"
+  defp default_moderation_reason("contest"), do: "independently_contested"
+  defp default_moderation_reason("publish_full"), do: "disclosure_reviewed"
+  defp default_moderation_reason("publish_summary"), do: "safe_summary"
+  defp default_moderation_reason("restrict"), do: "takedown_review"
+  defp default_moderation_reason(_), do: "moderator_decision"
+
   defp with_recent_auth(socket, fun) do
     if Accounts.sudo_mode?(socket.assigns.current_scope.account) do
       fun.()
@@ -752,11 +839,12 @@ defmodule TarakanWeb.RepositoryLive.Show do
   defp normalize_task_params(%{"kind" => "verify_findings"} = params), do: params
   defp normalize_task_params(params), do: Map.delete(params, "target_review_id")
 
+  # Job form: only who should pick it up. Hybrid stays a report provenance
+  # (agent draft a person edited), not a separate "human-guided" work mode.
   defp capability_options do
     [
-      {"Me (human)", "human"},
-      {"AI helper (agent)", "agent"},
-      {"Me + AI (hybrid)", "hybrid"}
+      {"AI helper", "agent"},
+      {"Human only", "human"}
     ]
   end
 

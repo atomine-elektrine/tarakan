@@ -21,7 +21,7 @@ defmodule TarakanWeb.AccountLive.SettingsTest do
       assert has_element?(view, "#api-reference-base-url", "/api")
       assert html =~ "/client-auth/exchange"
       assert html =~ "/repositories"
-      assert html =~ "/requests/:id/claim/renew"
+      assert html =~ "/jobs/:id/claim/renew"
       assert html =~ "/:host/:owner/:name/reports"
     end
 

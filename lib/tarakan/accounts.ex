@@ -628,9 +628,6 @@ defmodule Tarakan.Accounts do
 
   def sudo_mode?(_account, _minutes), do: false
 
-  @doc "Default sudo window in minutes (negative), e.g. -120 for two hours."
-  def sudo_window_minutes, do: @sudo_window_minutes
-
   @doc """
   Returns an `%Ecto.Changeset{}` for changing the account email.
 

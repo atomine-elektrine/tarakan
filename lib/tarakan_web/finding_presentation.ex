@@ -1,6 +1,6 @@
 defmodule TarakanWeb.FindingPresentation do
   @moduledoc """
-  Presentation helpers for scan findings and review records.
+  Presentation helpers for findings and reports.
 
   Agents often dump evidence + remediation into one description paragraph.
   We split common labels so the UI can show readable sections without changing
@@ -52,9 +52,33 @@ defmodule TarakanWeb.FindingPresentation do
   @doc "Plain-English provenance for readers, not wire jargon."
   def how_made_label("agent"), do: "Produced by an agent"
   def how_made_label("human"), do: "Written by a human"
-  def how_made_label("hybrid"), do: "Agent draft, human-guided"
+  def how_made_label("hybrid"), do: "Agent draft, human edited"
   def how_made_label(other) when is_binary(other), do: other
   def how_made_label(_), do: "Unknown"
+
+  @doc "Visibility + provenance chip for finding pages."
+  def disclosure_badge(visibility, provenance)
+      when is_binary(visibility) and is_binary(provenance) do
+    mode =
+      case visibility do
+        "public" -> "Public"
+        "public_summary" -> "Summary"
+        "restricted" -> "Restricted"
+        _ -> "Recorded"
+      end
+
+    source =
+      case provenance do
+        "agent" -> "agent"
+        "human" -> "human"
+        "hybrid" -> "hybrid"
+        other -> other
+      end
+
+    "#{mode} · #{source}"
+  end
+
+  def disclosure_badge(_visibility, _provenance), do: "Recorded"
 
   @doc "Short status label with meaning."
   def status_blurb("quarantined"),
@@ -74,7 +98,7 @@ defmodule TarakanWeb.FindingPresentation do
     trimmed = String.trim(notes)
 
     case Regex.run(
-           ~r/^Review Format submission with (\d+) finding\(s\)\.\s*Top issues:\s*(.+)$/s,
+           ~r/^(?:Review|Report) Format submission with (\d+) finding\(s\)\.\s*Top issues:\s*(.+)$/s,
            trimmed
          ) do
       [_, count, tops] ->

@@ -3,6 +3,7 @@ defmodule TarakanWeb.RepositoryLive.Index do
 
   alias Tarakan.Activity
   alias Tarakan.Community
+  alias Tarakan.Epidemics
   alias Tarakan.Repositories
   alias Tarakan.Scans
   alias Tarakan.Work
@@ -23,16 +24,18 @@ defmodule TarakanWeb.RepositoryLive.Index do
 
     {:ok,
      socket
-     |> assign(:page_title, "Turn on the lights.")
+     |> assign(:page_title, "Beautiful machines.")
      |> assign(
        :meta_description,
-       "Turn on the lights. Local agents. Public record. Pick up security jobs, review pinned commits, file findings."
+       "Local agents. Public Reports. Pick up Jobs or publish findings at a pinned commit."
      )
      |> assign(:canonical_path, ~p"/")
      |> assign(:stats, Repositories.registry_stats())
      |> assign(:contributor_count, Scans.public_contributor_count())
      |> assign(:open_tasks, Work.list_open_public_tasks())
      |> assign(:scan_queue, scan_queue())
+     |> assign(:epidemics, home_epidemics())
+     |> assign(:epidemics_refreshed_at, System.monotonic_time(:millisecond))
      |> assign(:observer_count, observer_count())
      |> assign(:shouts, chronological_shouts(socket.assigns.current_scope))
      |> assign(:shout_form, to_form(Community.change_shout(), as: :shout))
@@ -58,11 +61,31 @@ defmodule TarakanWeb.RepositoryLive.Index do
     )
   end
 
+  defp home_epidemics do
+    Epidemics.list_epidemics(min_repos: 2, days: 30, limit: 12)
+  end
+
+  @epidemics_debounce_ms 15_000
+
   defp refresh_collective(socket) do
     socket
     |> assign(:contributor_count, Scans.public_contributor_count())
     |> assign(:open_tasks, Work.list_open_public_tasks())
     |> assign(:scan_queue, scan_queue())
+    |> maybe_refresh_epidemics()
+  end
+
+  defp maybe_refresh_epidemics(socket) do
+    now = System.monotonic_time(:millisecond)
+    last = Map.get(socket.assigns, :epidemics_refreshed_at, 0)
+
+    if now - last >= @epidemics_debounce_ms do
+      socket
+      |> assign(:epidemics, home_epidemics())
+      |> assign(:epidemics_refreshed_at, now)
+    else
+      socket
+    end
   end
 
   @impl true

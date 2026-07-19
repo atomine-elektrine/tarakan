@@ -41,6 +41,15 @@ config :tarakan,
   gitlab_oauth_client: Tarakan.GitLab.OAuthStub,
   request_completion_mode: :document_or_legacy_prose
 
+# Epidemic tests: refresh rollups inline so list/get see data without Oban drain.
+config :tarakan, :epidemics,
+  read_from_rollup: true,
+  refresh_async: true,
+  sync_refresh: true
+
+# LiveView tests assert immediate registry stat updates.
+config :tarakan, :registry_stats_ttl_seconds, 0
+
 config :tarakan, :github,
   client_id: "test-client-id",
   client_secret: "test-client-secret",

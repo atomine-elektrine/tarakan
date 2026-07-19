@@ -14,6 +14,43 @@ defmodule TarakanWeb.RepositoryLiveTest do
     assert has_element?(view, "#account-login-button")
     refute has_element?(view, "#activity-wire")
     assert has_element?(view, "#registry-shoutbox")
+    assert has_element?(view, "#home-epidemics")
+  end
+
+  test "home epidemics lists multi-repo patterns", %{conn: conn} do
+    submitter = github_account_fixture()
+    other = github_account_fixture()
+    repo_a = listed_github_repository_fixture(submitter)
+    {:ok, repo_b} = Repositories.register_github_repository("acme/widget", other)
+    repo_b = listed_repository_fixture(repo_b)
+
+    title = "Home epidemic #{System.unique_integer([:positive])}"
+
+    findings = fn path ->
+      Jason.encode!(%{
+        "tarakan_scan_format" => 1,
+        "findings" => [
+          %{
+            "file" => path,
+            "severity" => "high",
+            "title" => title,
+            "description" => "Homepage epidemic fixture."
+          }
+        ]
+      })
+    end
+
+    scan_fixture(repo_a, submitter, %{"findings_json" => findings.("lib/a.ex")})
+    scan_fixture(repo_b, other, %{"findings_json" => findings.("src/b.rs")})
+
+    pattern = Tarakan.FindingMemory.pattern_key(title)
+
+    {:ok, view, html} = live(conn, ~p"/")
+
+    assert has_element?(view, "#home-epidemics-list")
+    assert has_element?(view, "#home-epidemic-map")
+    assert has_element?(view, "#home-epidemic-map-hub-#{pattern}")
+    assert html =~ title
   end
 
   test "scan queue excludes quarantined repositories", %{conn: conn} do
@@ -53,7 +90,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
     repository = listed_github_repository_fixture(creator)
     task = review_task_fixture(repository, creator)
     {:ok, repository_view, _html} = live(conn, ~p"/github.com/openai/codex/security")
-    {:ok, task_view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, task_view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     reporter = account_fixture()
     moderator = moderator_account_fixture()
@@ -395,7 +432,6 @@ defmodule TarakanWeb.RepositoryLiveTest do
       view
       |> form("#scan-#{scan.id}-moderation-form",
         moderation: %{
-          "moderation_reason" => "evidence_reviewed",
           "moderation_notes" =>
             "Two independent reviewers supplied reproducible evidence for the pinned commit."
         }
@@ -405,7 +441,6 @@ defmodule TarakanWeb.RepositoryLiveTest do
       view
       |> form("#scan-#{scan.id}-moderation-form",
         moderation: %{
-          "moderation_reason" => "safe_summary",
           "moderation_notes" =>
             "The public summary omits file paths, reproduction details, and verifier notes."
         }
@@ -444,7 +479,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
       {:ok, view, _html} = live(conn, ~p"/github.com/openai/codex/security")
 
       assert has_element?(view, "#scan-count", "0")
-      assert has_element?(view, "#repository-status", "Not reviewed")
+      assert has_element?(view, "#repository-status", "No report")
 
       scan = scan_fixture(repository, submitter, %{"findings_json" => findings_json_fixture(1)})
 
@@ -492,7 +527,7 @@ defmodule TarakanWeb.RepositoryLiveTest do
       |> render_submit()
 
       assert has_element?(view, "#review-tasks article", "Map the authorization boundary")
-      assert has_element?(view, "#review-tasks article", "Human-authored required")
+      assert has_element?(view, "#review-tasks article", "Human required")
     end
 
     test "a moderator can one-click open a default security report job", %{

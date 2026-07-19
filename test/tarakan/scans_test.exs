@@ -149,13 +149,10 @@ defmodule Tarakan.ScansTest do
       assert {:error, "must contain at most 200 findings"} = ScanFormat.parse(json)
     end
 
-    test "rejects ambiguous or unsafe finding paths" do
+    test "rejects absolute, traversal, and oversized finding paths" do
       paths = [
         "/etc/passwd",
         "../secret",
-        "lib//auth.ex",
-        "lib\\auth.ex",
-        "lib/./auth.ex",
         Enum.map_join(1..65, "/", fn _index -> "a" end)
       ]
 
@@ -175,6 +172,30 @@ defmodule Tarakan.ScansTest do
 
         assert {:error, "findings[0]: file must be a safe repository-relative path"} =
                  ScanFormat.parse(json)
+      end
+    end
+
+    test "canonicalizes common agent path variants on ingest" do
+      for {input, expected} <- [
+            {"./lib/auth.ex", "lib/auth.ex"},
+            {"lib//auth.ex", "lib/auth.ex"},
+            {"lib\\auth.ex", "lib/auth.ex"},
+            {"lib/./auth.ex", "lib/auth.ex"}
+          ] do
+        json =
+          Jason.encode!(%{
+            "tarakan_scan_format" => 1,
+            "findings" => [
+              %{
+                "file" => input,
+                "severity" => "high",
+                "title" => "Path cleanup",
+                "description" => "Agent path noise should collapse."
+              }
+            ]
+          })
+
+        assert {:ok, [%{file_path: ^expected}]} = ScanFormat.parse(json)
       end
     end
   end
@@ -368,11 +389,11 @@ defmodule Tarakan.ScansTest do
       assert Scans.list_scans(stale_scope, repository) == []
     end
 
-    test "probation accounts can submit at most five reviews per day", %{
+    test "probation accounts can submit at most three reviews per day", %{
       repository: repository,
       submitter: submitter
     } do
-      for _number <- 1..5 do
+      for _number <- 1..3 do
         assert {:ok, _scan} =
                  Scans.submit_scan(repository, submitter, valid_scan_attributes())
       end
@@ -519,7 +540,7 @@ defmodule Tarakan.ScansTest do
       assert %{evidence: [_message]} = errors_on(changeset)
     end
 
-    test "records when verification was human-guided by an agent", %{scan: scan} do
+    test "records when verification was agent draft, human edited", %{scan: scan} do
       assert {:ok, scan} =
                Scans.record_confirmation(scan, reviewer_account_fixture(), %{
                  "verdict" => "confirmed",

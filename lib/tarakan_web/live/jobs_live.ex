@@ -1,7 +1,5 @@
 defmodule TarakanWeb.JobsLive do
-  @moduledoc """
-  Public contribution queue: open security jobs anyone can claim.
-  """
+  @moduledoc "Open Jobs queue. Check jobs sort first."
   use TarakanWeb, :live_view
 
   alias Tarakan.Work
@@ -28,17 +26,17 @@ defmodule TarakanWeb.JobsLive do
     jobs = Work.list_open_public_tasks(@limit)
 
     socket
-    |> assign(:page_title, "Open jobs")
+    |> assign(:page_title, "Jobs")
     |> assign(
       :meta_description,
-      "Open security jobs on Tarakan. Claim in the browser or with tarakan --agent codex --pickup."
+      "Open Jobs on Tarakan. Check jobs first. Or: tarakan worker --agent codex"
     )
     |> assign(:canonical_path, ~p"/jobs")
     |> assign(:jobs, jobs)
     |> assign(:job_count, length(jobs))
     |> assign(
       :client_commands,
-      "tarakan login\ntarakan --agent codex --pickup"
+      "tarakan login\ntarakan --agent codex --pickup\ntarakan worker --agent codex"
     )
   end
 
@@ -49,15 +47,21 @@ defmodule TarakanWeb.JobsLive do
       <Layouts.page width={:wide}>
         <div class="flex flex-col gap-6 border-b-2 border-strong pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div class="min-w-0 max-w-2xl">
-            <h1 class="font-display text-4xl font-medium uppercase leading-none tracking-[0.02em] text-ink sm:text-5xl">
-              Open jobs
+            <h1 class="font-display text-3xl font-medium uppercase leading-none tracking-[0.02em] text-ink sm:text-5xl">
+              Jobs
             </h1>
             <p class="mt-3 text-sm leading-6 text-ink-muted">
-              Claim in the browser, or let a local agent pick the next one up.
+              Claim in the browser or with the client. Checks sort first.
+              No Job needed to publish a <.link
+                navigate={~p"/agents"}
+                class="font-semibold text-signal hover:underline"
+              >
+                Report
+              </.link>.
             </p>
             <pre
               id="jobs-client-commands"
-              class="mt-4 overflow-x-auto border-2 border-strong bg-panel px-4 py-3 font-mono text-[12px] leading-6 text-ink whitespace-pre"
+              class="mt-4 overflow-x-auto border-2 border-strong bg-panel px-3 py-3 font-mono text-[11px] leading-6 text-ink whitespace-pre sm:px-4 sm:text-[12px]"
             ><code>{@client_commands}</code></pre>
           </div>
           <div class="flex shrink-0 flex-wrap items-center gap-4">
@@ -84,7 +88,7 @@ defmodule TarakanWeb.JobsLive do
             <.link navigate={~p"/"} class="font-semibold text-signal hover:underline">
               Find a repo
             </.link>
-            and open a job, or wait for auto check jobs after a report.
+            or run <code class="font-mono text-ink">tarakan worker --agent codex</code>.
           </p>
         </div>
 
@@ -95,46 +99,29 @@ defmodule TarakanWeb.JobsLive do
         >
           <li :for={job <- @jobs} id={"job-#{job.id}"}>
             <.link
-              navigate={~p"/requests/#{job.id}"}
-              class="group grid gap-3 px-5 py-5 transition-colors hover:bg-panel sm:grid-cols-[1fr_auto] sm:items-center sm:px-6"
+              navigate={~p"/jobs/#{job.id}"}
+              class="group grid gap-3 px-4 py-4 transition-colors hover:bg-panel sm:grid-cols-[1fr_auto] sm:items-center sm:px-6 sm:py-5"
             >
               <div class="min-w-0">
-                <div class="flex flex-wrap items-center gap-2">
-                  <span class="font-mono text-xs font-semibold text-ink">
-                    {job.repository.owner}/{job.repository.name}
+                <p class="font-mono text-[11px] text-ink-faint">
+                  {job.repository.owner}/{job.repository.name}
+                  <span class="mx-1">·</span>
+                  <span title={job.commit_sha}>{String.slice(job.commit_sha || "", 0, 7)}</span>
+                  <span :if={job.kind == "verify_findings"} class="ml-2 text-signal">
+                    · check
                   </span>
-                  <.notch_badge class="text-ink-muted">
-                    {job_kind_label(job.kind)}
-                  </.notch_badge>
-                  <.notch_badge class="text-ink-faint">
-                    {job_capability_label(job.capability)}
-                  </.notch_badge>
-                  <span
-                    :if={job.commit_sha}
-                    class="font-mono text-[10px] text-ink-faint"
-                    title={job.commit_sha}
-                  >
-                    {String.slice(job.commit_sha, 0, 7)}
-                  </span>
-                </div>
-                <h2 class="mt-2 text-base font-semibold leading-snug text-ink group-hover:text-signal sm:text-lg">
-                  {job.title}
-                </h2>
-                <p
-                  :if={job.description not in [nil, ""]}
-                  class="mt-1.5 line-clamp-2 max-w-3xl text-sm leading-6 text-ink-muted"
-                >
-                  {job.description}
                 </p>
-                <p class="mt-2 font-mono text-[10px] text-ink-faint">
-                  <span :if={job.created_by}>@{job.created_by.handle}</span>
-                  <span :if={job.created_by} class="mx-1.5" aria-hidden="true">·</span>
-                  {Calendar.strftime(job.inserted_at, "%Y-%m-%d")}
+                <p class="mt-1.5 text-sm font-semibold leading-5 text-ink group-hover:text-signal">
+                  {job.title}
+                </p>
+                <p class="mt-1 font-mono text-[11px] text-ink-muted">
+                  {review_kind_label(job.kind)} · {provenance_label(job.capability)} required
                 </p>
               </div>
-              <span class="inline-flex items-center justify-end gap-1 font-display text-[11px] uppercase tracking-[0.16em] text-ink-faint transition group-hover:text-signal">
-                Open <.icon name="hero-arrow-right-mini" class="size-3.5" />
-              </span>
+              <.icon
+                name="hero-arrow-right-mini"
+                class="size-4 shrink-0 text-ink-faint transition group-hover:text-ink"
+              />
             </.link>
           </li>
         </ul>
@@ -142,19 +129,4 @@ defmodule TarakanWeb.JobsLive do
     </Layouts.app>
     """
   end
-
-  defp job_kind_label("code_review"), do: "Security report"
-  defp job_kind_label("verify_findings"), do: "Check report"
-  defp job_kind_label("threat_model"), do: "Threat model"
-  defp job_kind_label("privacy_review"), do: "Privacy"
-  defp job_kind_label("business_logic"), do: "Business logic"
-  defp job_kind_label("write_fix"), do: "Write fix"
-  defp job_kind_label(other) when is_binary(other), do: String.replace(other, "_", " ")
-  defp job_kind_label(_), do: "Job"
-
-  defp job_capability_label("agent"), do: "Agent"
-  defp job_capability_label("human"), do: "Human"
-  defp job_capability_label("hybrid"), do: "Hybrid"
-  defp job_capability_label(other) when is_binary(other), do: other
-  defp job_capability_label(_), do: ""
 end

@@ -87,6 +87,7 @@ defmodule TarakanWeb do
       # Core UI components
       import TarakanWeb.CoreComponents
       import TarakanWeb.RepositoryComponents
+      import TarakanWeb.EpidemicComponents
 
       # Common modules used in templates
       alias Phoenix.LiveView.JS

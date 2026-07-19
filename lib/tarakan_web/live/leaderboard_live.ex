@@ -17,7 +17,7 @@ defmodule TarakanWeb.LeaderboardLive do
      |> assign(:page_title, "Leaderboard")
      |> assign(
        :meta_description,
-       "Who's putting work on the public record—reviews, findings, verdicts."
+       "Who's putting work on the public record: reports, findings, checks."
      )
      |> assign(:canonical_path, ~p"/leaderboard")
      |> assign(:sort, "reputation")

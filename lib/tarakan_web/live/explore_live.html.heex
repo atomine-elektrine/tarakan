@@ -11,7 +11,7 @@
           Explore
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-ink-muted">
-          Registrations, reviews, verdicts, and discussion as they hit the public record.
+          Reports, Checks, registrations, and discussion as they hit the record.
         </p>
       </div>
 
@@ -25,7 +25,7 @@
         </span>
         <div
           id="explore-filter"
-          class="flex flex-wrap border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em]"
+          class="flex max-w-full overflow-x-auto overscroll-x-contain border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           role="group"
           aria-label="Filter by kind"
         >
@@ -34,19 +34,19 @@
               {value, label} <- [
                 {"all", "Everything"},
                 {"registrations", "Registrations"},
-                {"reviews", "Reviews"},
-                {"verdicts", "Verdicts"},
+                {"reports", "Reports"},
+                {"checks", "Checks"},
                 {"comments", "Comments"}
               ]
             }
             type="button"
             phx-click="filter"
             phx-value-kind={value}
-            aria-pressed={to_string(@kind == value)}
+            aria-pressed={to_string(filter_active?(@kind, value))}
             class={[
-              "px-3 py-1.5 transition",
-              @kind == value && "bg-btn text-btn-fg",
-              @kind != value && "text-ink-faint hover:text-ink"
+              "shrink-0 px-3 py-2 transition sm:py-1.5",
+              filter_active?(@kind, value) && "bg-btn text-btn-fg",
+              !filter_active?(@kind, value) && "text-ink-faint hover:text-ink"
             ]}
           >
             {label}
@@ -74,7 +74,7 @@
               name="q"
               value={@query}
               autocomplete="off"
-              placeholder="search the wire — handle or repository"
+              placeholder="search the wire: handle or repository"
               phx-debounce="200"
               phx-hook="SearchShortcut"
               class="h-12 w-full border-0 bg-transparent font-mono text-xs text-ink outline-none placeholder:text-ink-faint focus:ring-0"
@@ -109,7 +109,7 @@
             </span>
             <span :if={entry.kind == :scan} class="min-w-0 truncate text-ink-muted">
               <.handle_link handle={entry.handle} class="font-semibold" />
-              <span class="text-ink-faint">reviewed</span>
+              <span class="text-ink-faint">reported on</span>
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
@@ -124,7 +124,7 @@
             </span>
             <span :if={entry.kind == :verdict} class="min-w-0 truncate text-ink-muted">
               <.handle_link handle={entry.handle} class="font-semibold" />
-              <span class="text-ink-faint">{entry.verdict} a review of</span>
+              <span class="text-ink-faint">{entry.verdict} a finding on</span>
               <.link
                 navigate={wire_entry_path(entry)}
                 class="transition hover:text-ink hover:underline"
@@ -156,7 +156,7 @@
                   :if={entry.findings_count == 0 and entry.review_kind != "code_review"}
                   class="text-ink-muted"
                 >
-                  Reviewed
+                  Reported
                 </.notch_badge>
                 <.notch_badge :if={entry.findings_count > 0} class="text-signal">
                   {entry.findings_count}
@@ -179,42 +179,84 @@
         </div>
       </section>
 
-      <aside id="hot-findings">
-        <div class="flex items-baseline justify-between gap-3 border-b-2 border-strong px-3 pb-3">
-          <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-            Hot findings
-          </h2>
-          <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-            Last 7 days
-          </span>
+      <aside class="space-y-10">
+        <div id="hot-epidemics">
+          <div class="flex items-baseline justify-between gap-3 border-b-2 border-strong px-3 pb-3">
+            <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+              Patterns
+            </h2>
+            <.link
+              navigate={~p"/patterns"}
+              class="font-mono text-[10px] uppercase tracking-[0.14em] text-signal hover:underline"
+            >
+              All →
+            </.link>
+          </div>
+
+          <p :if={@epidemics == []} class="px-3 py-6 font-mono text-xs text-ink-faint">
+            No multi-repo patterns this month.
+          </p>
+
+          <ol :if={@epidemics != []} class="divide-y divide-rule">
+            <li :for={epidemic <- @epidemics}>
+              <.link
+                id={"hot-epidemic-#{epidemic.pattern_key}"}
+                navigate={~p"/patterns/#{epidemic.pattern_key}"}
+                class="group flex items-baseline gap-4 px-3 py-4 transition-colors hover:bg-panel"
+              >
+                <span class="shrink-0 font-mono text-xs tabular-nums text-signal">
+                  {epidemic.repo_count}
+                </span>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-semibold leading-5 text-ink transition group-hover:underline">
+                    {epidemic.title}
+                  </span>
+                  <span class="mt-1.5 block font-mono text-[11px] text-ink-faint">
+                    {epidemic.repo_count} repos · {epidemic.open_count} open
+                  </span>
+                </span>
+              </.link>
+            </li>
+          </ol>
         </div>
 
-        <p :if={@hot_findings == []} class="px-3 py-8 font-mono text-xs text-ink-faint">
-          No findings upvoted this week.
-        </p>
+        <div id="hot-findings">
+          <div class="flex items-baseline justify-between gap-3 border-b-2 border-strong px-3 pb-3">
+            <h2 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
+              Hot findings
+            </h2>
+            <span class="font-mono text-[11px] text-ink-faint">
+              Last 7 days
+            </span>
+          </div>
 
-        <ol :if={@hot_findings != []} class="divide-y divide-rule">
-          <li :for={finding <- @hot_findings}>
-            <.link
-              id={"hot-finding-#{finding.id}"}
-              navigate={~p"/findings/#{finding.public_id}"}
-              class="group flex items-baseline gap-4 px-3 py-4 transition-colors hover:bg-panel"
-            >
-              <span class="shrink-0 font-mono text-xs tabular-nums text-phosphor">
-                +{finding.score}
-              </span>
-              <span class="min-w-0">
-                <span class="block truncate text-sm font-semibold leading-5 text-ink transition group-hover:underline">
-                  {finding.title}
+          <p :if={@hot_findings == []} class="px-3 py-8 font-mono text-xs text-ink-faint">
+            No findings upvoted this week.
+          </p>
+
+          <ol :if={@hot_findings != []} class="divide-y divide-rule">
+            <li :for={finding <- @hot_findings}>
+              <.link
+                id={"hot-finding-#{finding.id}"}
+                navigate={~p"/findings/#{finding.public_id}"}
+                class="group flex items-baseline gap-4 px-3 py-4 transition-colors hover:bg-panel"
+              >
+                <span class="shrink-0 font-mono text-xs tabular-nums text-phosphor">
+                  +{finding.score}
                 </span>
-                <span class="mt-1.5 block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-                  {finding.owner}/{finding.name}
-                  <span :if={finding.severity}> · {finding.severity}</span>
+                <span class="min-w-0">
+                  <span class="block truncate text-sm font-semibold leading-5 text-ink transition group-hover:underline">
+                    {finding.title}
+                  </span>
+                  <span class="mt-1.5 block truncate font-mono text-[11px] text-ink-faint">
+                    {finding.owner}/{finding.name}
+                    <span :if={finding.severity}> · {finding.severity}</span>
+                  </span>
                 </span>
-              </span>
-            </.link>
-          </li>
-        </ol>
+              </.link>
+            </li>
+          </ol>
+        </div>
       </aside>
     </div>
   </Layouts.page>

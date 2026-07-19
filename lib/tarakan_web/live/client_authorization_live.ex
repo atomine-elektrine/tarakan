@@ -112,7 +112,7 @@ defmodule TarakanWeb.ClientAuthorizationLive do
               </div>
             <% true -> %>
               <div id="client-authorization-pending" class={["mt-8"]}>
-                <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>
+                <p class={["text-xs font-semibold text-ink-muted"]}>
                   Code
                 </p>
                 <div

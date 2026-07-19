@@ -33,6 +33,6 @@ defmodule TarakanWeb.FindingPresentationTest do
 
   test "how_made_label" do
     assert FindingPresentation.how_made_label("agent") == "Produced by an agent"
-    assert FindingPresentation.how_made_label("hybrid") == "Agent draft, human-guided"
+    assert FindingPresentation.how_made_label("hybrid") == "Agent draft, human edited"
   end
 end

@@ -68,15 +68,24 @@ config :tarakan, Tarakan.Git.Concurrency, max_concurrent: 32
 config :tarakan, Oban,
   engine: Oban.Engines.Basic,
   repo: Tarakan.Repo,
-  queues: [sync: 5, mirror: 3],
+  # epidemics: 1 keeps DB pool pressure low (compose POOL_SIZE default is 5).
+  queues: [sync: 5, mirror: 3, epidemics: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 7 * 24 * 60 * 60},
     {Oban.Plugins.Cron,
      crontab: [
        {"0 3 * * *", Tarakan.Sync.RepositorySweep},
-       {"0 4 * * 0", Tarakan.Sync.HostedRepositoryGC}
+       {"30 3 * * *", Tarakan.Epidemics.Reconcile},
+       {"0 4 * * 0", Tarakan.Sync.HostedRepositoryGC},
+       {"0 * * * *", Tarakan.Epidemics.RecomputeWindows}
      ]}
   ]
+
+# Epidemic rollups: async projection + dual-read. Tests set sync_refresh: true.
+config :tarakan, :epidemics,
+  read_from_rollup: true,
+  refresh_async: true,
+  sync_refresh: false
 
 config :tarakan, :gitlab,
   base_url: "https://gitlab.com",

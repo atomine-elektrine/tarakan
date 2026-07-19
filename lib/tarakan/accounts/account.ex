@@ -12,7 +12,7 @@ defmodule Tarakan.Accounts.Account do
   @reserved_handles ~w(admin api moderator root security support system tarakan www
                        accounts auth findings work requests jobs agents client moderation
                        dev live assets images favicon robots github gitlab codeberg
-                       bitbucket repositories hosted fonts leaderboard explore)
+                       bitbucket repositories hosted fonts leaderboard explore epidemics)
   @states ~w(probation active restricted suspended banned)
   @platform_roles ~w(member moderator admin)
   @trust_tiers ~w(new contributor reviewer)

@@ -7,10 +7,7 @@
     </.breadcrumbs>
 
     <header class={["mt-4 border-b-2 border-strong pb-6"]}>
-      <p class={["font-mono text-[10px] uppercase tracking-[0.2em] text-signal"]}>
-        Account authority
-      </p>
-      <h1 class={["mt-2 font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-4xl"]}>
+      <h1 class={["font-display text-3xl uppercase tracking-[0.05em] text-ink sm:text-4xl"]}>
         Manage @{@account.handle}
       </h1>
       <p class={["mt-3 text-sm leading-6 text-ink-muted"]}>
@@ -20,13 +17,13 @@
 
     <section class={["mt-6 grid gap-4 border-2 border-strong bg-panel p-5 sm:grid-cols-2 sm:p-6"]}>
       <div>
-        <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>Email</p>
+        <p class={["text-xs font-medium text-ink-faint"]}>Email</p>
         <p id="admin-account-email" class={["mt-1 break-all text-sm text-ink"]}>
           {@account.email}
         </p>
       </div>
       <div>
-        <p class={["font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint"]}>
+        <p class={["text-xs font-medium text-ink-faint"]}>
           Reputation
         </p>
         <p id="admin-account-reputation" class={["mt-1 text-sm text-ink"]}>

@@ -19,7 +19,7 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
      socket
      |> assign(:page_title, task.title)
      |> assign(:meta_description, task_meta_description(task))
-     |> assign(:canonical_path, ~p"/requests/#{task.id}")
+     |> assign(:canonical_path, ~p"/jobs/#{task.id}")
      |> assign_task(task)
      |> assign(:decision_form, decision_form(task))
      |> assign(:disclosure_form, disclosure_form())}
@@ -97,7 +97,7 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
         {:noreply,
          socket
          |> assign_task(task)
-         |> put_flash(:info, "Finding verdict and evidence submitted for independent review.")}
+         |> put_flash(:info, "Finding check submitted.")}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {:noreply,
@@ -292,7 +292,7 @@ defmodule TarakanWeb.ReviewTaskLive.Show do
     if account && Accounts.sudo_mode?(account) do
       fun.()
     else
-      return_to = ~p"/work/#{socket.assigns.task.id}"
+      return_to = ~p"/jobs/#{socket.assigns.task.id}"
 
       {:noreply,
        socket

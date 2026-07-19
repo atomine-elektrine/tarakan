@@ -226,7 +226,7 @@ defmodule TarakanWeb.AccountLive.Settings do
                     Send <code class="font-mono text-ink">Authorization: Bearer &lt;token&gt;</code>
                     and <code class="font-mono text-ink">Accept: application/json</code>.
                   </p>
-                  <pre class="mt-2 overflow-x-auto border-2 border-rule bg-ground p-3 font-mono text-[11px] leading-5 text-ink"><code>curl "{@api_base_url}/requests" \
+                  <pre class="mt-2 overflow-x-auto border-2 border-rule bg-ground p-3 font-mono text-[11px] leading-5 text-ink"><code>curl "{@api_base_url}/jobs" \
     -H "Authorization: Bearer $TARAKAN_API_TOKEN" \
     -H "Accept: application/json"</code></pre>
                 </div>
@@ -260,15 +260,15 @@ defmodule TarakanWeb.AccountLive.Settings do
                 </div>
 
                 <div>
-                  <p class="font-semibold text-ink">Jobs / Requests</p>
+                  <p class="font-semibold text-ink">Jobs</p>
                   <dl class="mt-2 grid gap-x-3 gap-y-1 font-mono text-[11px] sm:grid-cols-[4rem_1fr]">
-                    <dt class="text-ink">GET</dt><dd>/requests</dd>
-                    <dt class="text-ink">GET</dt><dd>/:host/:owner/:name/requests</dd>
-                    <dt class="text-ink">GET</dt><dd>/requests/:id</dd>
-                    <dt class="text-ink">POST</dt><dd>/requests/:id/claim</dd>
-                    <dt class="text-ink">POST</dt><dd>/requests/:id/claim/renew</dd>
-                    <dt class="text-ink">DELETE</dt><dd>/requests/:id/claim</dd>
-                    <dt class="text-ink">POST</dt><dd>/requests/:id/complete</dd>
+                    <dt class="text-ink">GET</dt><dd>/jobs</dd>
+                    <dt class="text-ink">GET</dt><dd>/:host/:owner/:name/jobs</dd>
+                    <dt class="text-ink">GET</dt><dd>/jobs/:id</dd>
+                    <dt class="text-ink">POST</dt><dd>/jobs/:id/claim</dd>
+                    <dt class="text-ink">POST</dt><dd>/jobs/:id/claim/renew</dd>
+                    <dt class="text-ink">DELETE</dt><dd>/jobs/:id/claim</dd>
+                    <dt class="text-ink">POST</dt><dd>/jobs/:id/complete</dd>
                   </dl>
                   <p class="mt-2">
                     Scopes: <code class="font-mono text-ink">tasks:read</code>, <code class="font-mono text-ink">tasks:claim</code>, and <code class="font-mono text-ink">contributions:write</code>.
@@ -292,7 +292,7 @@ defmodule TarakanWeb.AccountLive.Settings do
                     for restricted evidence,
                     and <code class="font-mono text-ink">reviews:verify</code>
                     to check findings.
-                    Verification also requires qualified reviewer standing.
+                    Checks also require qualified reviewer standing.
                   </p>
                 </div>
 
@@ -301,13 +301,8 @@ defmodule TarakanWeb.AccountLive.Settings do
                   <p class="mt-1">
                     Use <code class="font-mono text-ink">github.com</code>
                     or <code class="font-mono text-ink">tarakan.lol</code>
-                    for <code class="font-mono text-ink">:host</code>. Requests use JSON bodies;
+                    for <code class="font-mono text-ink">:host</code>. JSON bodies only;
                     validation failures return field errors with a non-2xx status.
-                  </p>
-                  <p class="mt-1">
-                    Canonical paths are shown above. The older <code class="font-mono text-ink">/jobs</code>, <code class="font-mono text-ink">/work</code>, <code class="font-mono text-ink">/reviews</code>, <code class="font-mono text-ink">/scans</code>, and
-                    <code class="font-mono text-ink">/tasks</code>
-                    aliases remain available for compatibility.
                   </p>
                 </div>
               </div>
@@ -650,8 +645,8 @@ defmodule TarakanWeb.AccountLive.Settings do
     end
   end
 
-  defp credential_scope_label("tasks:read"), do: "Read visible review tasks"
-  defp credential_scope_label("tasks:claim"), do: "Claim and release review tasks"
+  defp credential_scope_label("tasks:read"), do: "Read visible jobs"
+  defp credential_scope_label("tasks:claim"), do: "Claim and release jobs"
   defp credential_scope_label("contributions:write"), do: "Submit task evidence"
   defp credential_scope_label("findings:submit"), do: "Submit quarantined scan results"
   defp credential_scope_label("reports:write"), do: "Report abuse and view your reports"
@@ -659,7 +654,7 @@ defmodule TarakanWeb.AccountLive.Settings do
   defp credential_scope_label("reviews:read"),
     do: "Read restricted review findings (reviewer tier)"
 
-  defp credential_scope_label("reviews:verify"), do: "Record verdicts on reviews (reviewer tier)"
+  defp credential_scope_label("reviews:verify"), do: "Record checks on reports (reviewer tier)"
   defp credential_scope_label("repo:read"), do: "Clone your visible hosted repositories"
   defp credential_scope_label("repo:write"), do: "Push to hosted repositories you steward"
   defp credential_scope_label(scope), do: scope

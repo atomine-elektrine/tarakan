@@ -12,7 +12,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
   end
 
   test "the public can inspect a task but cannot claim anonymously", %{conn: conn, task: task} do
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     assert has_element?(view, "#review-task-title")
     assert has_element?(view, "#review-task-status", "Open")
@@ -24,7 +24,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     html = render_hook(view, "review", %{"action" => "invented", "decision" => %{}})
     assert html =~ "review action is invalid"
 
-    assert {:error, {:live_redirect, %{to: "/accounts/log-in?return_to=%2Fwork%2F" <> _}}} =
+    assert {:error, {:live_redirect, %{to: "/accounts/log-in?return_to=%2Fjobs%2F" <> _}}} =
              render_hook(view, "publish", %{"decision" => %{}})
   end
 
@@ -34,7 +34,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     task: task
   } do
     conn = log_in_account(conn, creator)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     assert has_element?(view, "#claim-review-task-button")
     refute has_element?(view, "#review-task-own-notice")
@@ -59,12 +59,10 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
 
     worker = account_fixture()
     conn = log_in_account(conn, worker)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     assert has_element?(view, "#review-task-title")
-    html = render(view)
-    assert html =~ "Agent-generated"
-    assert html =~ "required"
+    assert has_element?(view, "#review-task", "Agent required")
 
     view |> element("#claim-review-task-button") |> render_click()
 
@@ -96,7 +94,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     {:ok, view, _html} =
       conn
       |> log_in_account(worker)
-      |> live(~p"/work/#{task.id}")
+      |> live(~p"/jobs/#{task.id}")
 
     assert has_element?(view, "#review-task-target-report", "Target report ##{report.id}")
     assert has_element?(view, "#review-task-target-report", "Unsanitized input")
@@ -129,7 +127,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     {:ok, view, _html} =
       conn
       |> log_in_account(worker)
-      |> live(~p"/work/#{task.id}")
+      |> live(~p"/jobs/#{task.id}")
 
     view |> element("#claim-review-task-button") |> render_click()
 
@@ -169,7 +167,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     {:ok, view, _html} =
       conn
       |> log_in_account(worker)
-      |> live(~p"/work/#{task.id}")
+      |> live(~p"/jobs/#{task.id}")
 
     view |> element("#claim-review-task-button") |> render_click()
 
@@ -195,7 +193,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     {:ok, view, _html} =
       conn
       |> log_in_account(worker)
-      |> live(~p"/work/#{task.id}")
+      |> live(~p"/jobs/#{task.id}")
 
     view |> element("#claim-review-task-button") |> render_click()
 
@@ -225,7 +223,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
   test "another contributor claims and submits the task for review", %{conn: conn, task: task} do
     worker = account_fixture()
     conn = log_in_account(conn, worker)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     view |> element("#claim-review-task-button") |> render_click()
 
@@ -245,7 +243,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
 
     assert has_element?(view, "#review-task-status", "Submitted")
     assert has_element?(view, "#review-task-review-pending")
-    assert has_element?(view, "#review-task-contribution", "Human-authored")
+    assert has_element?(view, "#review-task-contribution", "Human")
     assert has_element?(view, "#review-task-contribution", "boundary is enforced")
     refute has_element?(view, "#review-task-completion-form")
   end
@@ -266,7 +264,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
 
     reviewer = moderator_account_fixture()
     conn = log_in_account(conn, reviewer)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     assert has_element?(view, "#review-task-decision-form")
 
@@ -287,7 +285,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     assert Tarakan.Work.get_visible_task(task.id)
 
     {:ok, accepted_view, accepted_html} =
-      live(Phoenix.ConnTest.build_conn(), ~p"/work/#{task.id}")
+      live(Phoenix.ConnTest.build_conn(), ~p"/jobs/#{task.id}")
 
     assert has_element?(accepted_view, "#review-task-status", "Accepted")
     assert accepted_html =~ "Reproduced the negative path"
@@ -311,7 +309,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     assert has_element?(view, "#review-task-visibility", "Public summary")
 
     {:ok, public_view, public_html} =
-      live(Phoenix.ConnTest.build_conn(), ~p"/work/#{task.id}")
+      live(Phoenix.ConnTest.build_conn(), ~p"/jobs/#{task.id}")
 
     assert has_element?(public_view, "#review-task-status", "Accepted")
     assert public_html =~ "boundary is enforced"
@@ -341,9 +339,9 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
     # Outside the two-hour sudo window.
     stale_at = DateTime.add(DateTime.utc_now(), -3, :hour)
     conn = log_in_account(conn, reviewer, token_authenticated_at: stale_at)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
-    assert {:error, {:live_redirect, %{to: "/accounts/log-in?return_to=%2Fwork%2F" <> _}}} =
+    assert {:error, {:live_redirect, %{to: "/accounts/log-in?return_to=%2Fjobs%2F" <> _}}} =
              view
              |> form("#review-task-disclosure-form",
                disclosure: %{
@@ -358,7 +356,7 @@ defmodule TarakanWeb.ReviewTaskLiveTest do
   test "a claimant can release work back to the queue", %{conn: conn, task: task} do
     worker = account_fixture()
     conn = log_in_account(conn, worker)
-    {:ok, view, _html} = live(conn, ~p"/work/#{task.id}")
+    {:ok, view, _html} = live(conn, ~p"/jobs/#{task.id}")
 
     view |> element("#claim-review-task-button") |> render_click()
     view |> element("#release-review-task-button") |> render_click()

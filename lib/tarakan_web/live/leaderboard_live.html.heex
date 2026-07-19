@@ -17,7 +17,7 @@
 
       <div
         id="leaderboard-sort"
-        class="flex flex-wrap border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em]"
+        class="flex max-w-full overflow-x-auto overscroll-x-contain border-2 border-strong font-display text-[10px] uppercase tracking-[0.14em] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         role="group"
         aria-label="Rank by"
       >
@@ -25,9 +25,9 @@
           :for={
             {value, label} <- [
               {"reputation", "Reputation"},
-              {"reviews", "Reviews"},
+              {"reviews", "Reports"},
               {"findings", "Findings"},
-              {"verdicts", "Verdicts"}
+              {"verdicts", "Checks"}
             ]
           }
           type="button"
@@ -35,7 +35,7 @@
           phx-value-by={value}
           aria-pressed={to_string(@sort == value)}
           class={[
-            "px-3 py-1.5 transition",
+            "shrink-0 px-3 py-2 transition sm:py-1.5",
             @sort == value && "bg-btn text-btn-fg",
             @sort != value && "text-ink-faint hover:text-ink"
           ]}
@@ -73,8 +73,8 @@
               {tier_label(entry.account.trust_tier)}
             </span>
           </div>
-          <p class="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
-            {entry.stats.reviews} reviews · {entry.stats.findings} findings · {entry.stats.verdicts} verdicts
+          <p class="mt-0.5 font-mono text-[11px] text-ink-faint">
+            {entry.stats.reviews} reports · {entry.stats.findings} findings · {entry.stats.verdicts} checks
           </p>
         </div>
 
@@ -82,7 +82,7 @@
           <p class="font-display text-2xl font-medium tabular-nums text-ink">
             {entry.reputation.total}
           </p>
-          <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+          <p class="font-mono text-[11px] text-ink-faint">
             reputation
           </p>
         </div>

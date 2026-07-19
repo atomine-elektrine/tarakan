@@ -37,7 +37,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
   end
 
   test "all work queue endpoints require an API token", %{conn: conn} do
-    conn = get(conn, ~p"/api/github.com/openai/codex/tasks")
+    conn = get(conn, ~p"/api/github.com/openai/codex/jobs")
 
     assert json_response(conn, 401)["error"] =~ "API token"
   end
@@ -52,9 +52,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
 
     conn = conn |> authed(token) |> get(~p"/api/jobs")
 
-    assert %{"jobs" => jobs, "tasks" => tasks, "requests" => requests} = json_response(conn, 200)
-    assert length(jobs) == length(tasks)
-    assert length(jobs) == length(requests)
+    assert %{"jobs" => jobs} = json_response(conn, 200)
     assert Enum.any?(jobs, &(&1["id"] == task.id))
     match = Enum.find(jobs, &(&1["id"] == task.id))
     assert match["status"] == "open"
@@ -92,9 +90,9 @@ defmodule TarakanWeb.API.WorkControllerTest do
   } do
     task = review_task_fixture(repository, creator)
 
-    conn = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/tasks")
+    conn = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/jobs")
 
-    assert %{"tasks" => [response]} = json_response(conn, 200)
+    assert %{"jobs" => [response]} = json_response(conn, 200)
     assert response["id"] == task.id
     assert response["kind"] == "threat_model"
     assert response["capability"] == "human"
@@ -117,22 +115,21 @@ defmodule TarakanWeb.API.WorkControllerTest do
     assert response["claimant"] == nil
     assert response["lease"] == nil
     assert response["contribution"] == nil
-    assert response["task_url"] =~ "/requests/#{task.id}"
-    assert response["request_url"] =~ "/requests/#{task.id}"
+    assert response["job_url"] =~ "/jobs/#{task.id}"
   end
 
   test "returns an empty list and 404s an unregistered repository", %{
     conn: conn,
     worker_token: token
   } do
-    conn1 = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/tasks")
-    assert json_response(conn1, 200) == %{"requests" => [], "tasks" => []}
+    conn1 = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/jobs")
+    assert json_response(conn1, 200) == %{"jobs" => []}
 
     conn2 =
       conn
       |> recycle()
       |> authed(token)
-      |> get(~p"/api/github.com/unknown/repository/tasks")
+      |> get(~p"/api/github.com/unknown/repository/jobs")
 
     assert json_response(conn2, 404)["error"] =~ "not registered"
   end
@@ -147,7 +144,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       |> Repository.listing_changeset(%{listing_status: "quarantined"})
       |> Repo.update!()
 
-    conn = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/tasks")
+    conn = conn |> authed(token) |> get(~p"/api/github.com/openai/codex/jobs")
 
     assert json_response(conn, 404)["error"] =~ "not registered"
   end
@@ -160,14 +157,14 @@ defmodule TarakanWeb.API.WorkControllerTest do
   } do
     task = review_task_fixture(repository, creator)
 
-    conn1 = conn |> authed(token) |> get(~p"/api/work/#{task.id}")
+    conn1 = conn |> authed(token) |> get(~p"/api/jobs/#{task.id}")
     assert json_response(conn1, 200)["id"] == task.id
 
-    conn2 = conn |> recycle() |> authed(token) |> get("/api/work/not-an-id")
-    assert json_response(conn2, 404)["error"] == "review task not found"
+    conn2 = conn |> recycle() |> authed(token) |> get("/api/jobs/not-an-id")
+    assert json_response(conn2, 404)["error"] == "job not found"
 
-    conn3 = conn |> recycle() |> authed(token) |> get("/api/work/999999999")
-    assert json_response(conn3, 404)["error"] == "review task not found"
+    conn3 = conn |> recycle() |> authed(token) |> get("/api/jobs/999999999")
+    assert json_response(conn3, 404)["error"] == "job not found"
   end
 
   test "claims a task and exposes the active lease", %{
@@ -179,7 +176,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
   } do
     task = review_task_fixture(repository, creator)
 
-    conn = conn |> authed(token) |> post(~p"/api/work/#{task.id}/claim")
+    conn = conn |> authed(token) |> post(~p"/api/jobs/#{task.id}/claim")
 
     response = json_response(conn, 200)
     assert response["status"] == "claimed"
@@ -194,7 +191,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(token)
-      |> post(~p"/api/work/#{task.id}/claim")
+      |> post(~p"/api/jobs/#{task.id}/claim")
 
     repeated = json_response(conn, 200)
     assert repeated["claimant"]["id"] == worker.id
@@ -211,21 +208,21 @@ defmodule TarakanWeb.API.WorkControllerTest do
     task = review_task_fixture(repository, creator)
 
     # Solo/hosted workflow: job creators may claim and perform their own Jobs.
-    conn1 = conn |> authed(creator_token) |> post(~p"/api/work/#{task.id}/claim")
+    conn1 = conn |> authed(creator_token) |> post(~p"/api/jobs/#{task.id}/claim")
     assert json_response(conn1, 200)["claimant"]["id"] == creator.id
 
     conn_release =
-      conn |> recycle() |> authed(creator_token) |> delete(~p"/api/work/#{task.id}/claim")
+      conn |> recycle() |> authed(creator_token) |> delete(~p"/api/jobs/#{task.id}/claim")
 
     assert json_response(conn_release, 200)["status"] == "open"
 
-    conn2 = conn |> recycle() |> authed(worker_token) |> post(~p"/api/work/#{task.id}/claim")
+    conn2 = conn |> recycle() |> authed(worker_token) |> post(~p"/api/jobs/#{task.id}/claim")
     assert json_response(conn2, 200)
 
     outsider = account_fixture()
     outsider_token = client_token(outsider)
 
-    conn3 = conn |> recycle() |> authed(outsider_token) |> post(~p"/api/work/#{task.id}/claim")
+    conn3 = conn |> recycle() |> authed(outsider_token) |> post(~p"/api/jobs/#{task.id}/claim")
     assert json_response(conn3, 409)["error"] =~ "active claim"
   end
 
@@ -240,14 +237,14 @@ defmodule TarakanWeb.API.WorkControllerTest do
     {:ok, task} = Work.claim_task(task, worker)
     outsider_token = client_token(account_fixture())
 
-    conn1 = conn |> authed(outsider_token) |> delete(~p"/api/work/#{task.id}/claim")
+    conn1 = conn |> authed(outsider_token) |> delete(~p"/api/jobs/#{task.id}/claim")
     assert json_response(conn1, 403)["error"] =~ "current claimant"
 
     conn2 =
       conn
       |> recycle()
       |> authed(worker_token)
-      |> delete(~p"/api/work/#{task.id}/claim")
+      |> delete(~p"/api/jobs/#{task.id}/claim")
 
     response = json_response(conn2, 200)
     assert response["status"] == "open"
@@ -263,14 +260,14 @@ defmodule TarakanWeb.API.WorkControllerTest do
   } do
     task = review_task_fixture(repository, creator)
 
-    conn = conn |> authed(token) |> post(~p"/api/work/#{task.id}/claim")
+    conn = conn |> authed(token) |> post(~p"/api/jobs/#{task.id}/claim")
     first = json_response(conn, 200)
 
     conn =
       conn
       |> recycle()
       |> authed(token)
-      |> post(~p"/api/work/#{task.id}/claim/renew")
+      |> post(~p"/api/jobs/#{task.id}/claim/renew")
 
     renewed = json_response(conn, 200)
     assert renewed["lease"]["active"]
@@ -293,7 +290,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       "evidence" => "Reviewed both entry points and ran the focused regression test."
     }
 
-    conn = conn |> authed(token) |> post(~p"/api/work/#{task.id}/complete", body)
+    conn = conn |> authed(token) |> post(~p"/api/jobs/#{task.id}/complete", body)
 
     response = json_response(conn, 200)
     assert response["status"] == "submitted"
@@ -319,7 +316,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(token)
-      |> delete(~p"/api/work/#{task.id}/claim")
+      |> delete(~p"/api/jobs/#{task.id}/claim")
 
     assert json_response(conn2, 403)["error"] =~ "current claimant"
   end
@@ -336,7 +333,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
     conn1 =
       conn
       |> authed(token)
-      |> post(~p"/api/work/#{task.id}/complete", %{
+      |> post(~p"/api/jobs/#{task.id}/complete", %{
         "provenance" => "human",
         "summary" => "Completed",
         "evidence" => "Attempted submission without first holding the task's active claim."
@@ -350,7 +347,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(token)
-      |> post(~p"/api/work/#{task.id}/complete", %{
+      |> post(~p"/api/jobs/#{task.id}/complete", %{
         "provenance" => "unverifiable",
         "summary" => ""
       })
@@ -373,7 +370,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
     conn =
       conn
       |> authed(token)
-      |> post(~p"/api/work/#{task.id}/complete", %{
+      |> post(~p"/api/jobs/#{task.id}/complete", %{
         "provenance" => "human",
         "summary" => "Manual review completed.",
         "evidence" => "Manually traced the requested paths and recorded reproducible notes."
@@ -396,9 +393,9 @@ defmodule TarakanWeb.API.WorkControllerTest do
     conn1 =
       conn
       |> authed(worker_token)
-      |> get(~p"/api/github.com/openai/codex/tasks")
+      |> get(~p"/api/github.com/openai/codex/jobs")
 
-    assert [listed] = json_response(conn1, 200)["tasks"]
+    assert [listed] = json_response(conn1, 200)["jobs"]
     assert listed["id"] == proposal.id
     assert listed["status"] == "proposed"
     assert listed["visibility"] == "public"
@@ -407,7 +404,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(creator_token)
-      |> get(~p"/api/work/#{proposal.id}")
+      |> get(~p"/api/jobs/#{proposal.id}")
 
     assert json_response(conn2, 200)["status"] == "proposed"
 
@@ -418,7 +415,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(moderator_token)
-      |> post("/api/work/#{proposal.id}/publish", %{
+      |> post("/api/jobs/#{proposal.id}/publish", %{
         "reason" => "The task scope is safe, bounded, and useful to contributors."
       })
 
@@ -452,7 +449,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
     conn1 =
       conn
       |> authed(worker_token)
-      |> post("/api/work/#{submitted.id}/accept", %{
+      |> post("/api/jobs/#{submitted.id}/accept", %{
         "reason" => "I should not be allowed to approve my own contribution.",
         "evidence" => "This evidence comes from the original contributor and is not independent."
       })
@@ -467,7 +464,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(reviewer_token)
-      |> post("/api/work/#{submitted.id}/accept", %{
+      |> post("/api/jobs/#{submitted.id}/accept", %{
         "reason" => "The result was independently reproduced at the pinned commit.",
         "evidence" => "Checked out the pinned SHA and ran the documented negative-path tests."
       })
@@ -491,7 +488,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(outsider_token)
-      |> get(~p"/api/work/#{accepted.id}")
+      |> get(~p"/api/jobs/#{accepted.id}")
 
     response = json_response(conn3, 200)
     assert response["status"] == "accepted"
@@ -509,7 +506,7 @@ defmodule TarakanWeb.API.WorkControllerTest do
       conn
       |> recycle()
       |> authed(outsider_token)
-      |> get(~p"/api/work/#{redacted.id}")
+      |> get(~p"/api/jobs/#{redacted.id}")
 
     response = json_response(conn4, 200)
     assert response["visibility"] == "public_summary"

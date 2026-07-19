@@ -29,8 +29,12 @@ defmodule TarakanWeb.FindingLiveTest do
     assert has_element?(view, "#finding-canonical-memory", "detected in 1 run")
     assert has_element?(view, "#finding-source-link[href='/findings/#{finding.public_id}/code']")
     assert has_element?(view, "#finding-verified-badge")
+    assert has_element?(view, "#finding-disclosure-badge")
+    assert has_element?(view, "#finding-copy-link")
+    assert has_element?(view, "#finding-cite", "/findings/#{finding.public_id}")
     assert has_element?(view, "#finding-verdict-counts", "2 confirmed · 0 disputed")
     assert html =~ scan.commit_sha
+    assert html =~ "Public"
     assert has_element?(view, "#finding-record-link[href='/github.com/openai/codex/security']")
   end
 
@@ -127,7 +131,7 @@ defmodule TarakanWeb.FindingLiveTest do
 
     assert html =~ ~s(rel="canonical")
     assert html =~ "/findings/#{finding.public_id}"
-    assert html =~ "High severity finding in openai/codex"
+    assert html =~ "High in openai/codex"
     assert get_resp_header(get(conn, ~p"/findings/#{finding.public_id}"), "x-robots-tag") == []
   end
 

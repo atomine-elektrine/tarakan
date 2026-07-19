@@ -8,7 +8,7 @@ defmodule TarakanWeb.ModerationReportLive.New do
     {"Account", "account"},
     {"Scan", "scan"},
     {"Finding", "finding"},
-    {"Review task", "review_task"},
+    {"Job", "review_task"},
     {"Contribution", "contribution"}
   ]
 

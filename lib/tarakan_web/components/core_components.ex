@@ -66,7 +66,7 @@ defmodule TarakanWeb.CoreComponents do
       phx-hook={@auto_dismiss && "AutoDismiss"}
       data-auto-dismiss-ms={@auto_dismiss && @dismiss_after}
       role="alert"
-      class="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))]"
+      class="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] right-[max(1rem,env(safe-area-inset-right))] left-[max(1rem,env(safe-area-inset-left))] z-50 w-auto max-w-[min(24rem,calc(100vw-2rem))] sm:left-auto"
       {@rest}
     >
       <div class={[
@@ -485,7 +485,7 @@ defmodule TarakanWeb.CoreComponents do
     ~H"""
     <div
       id={"vote-#{@subject_type}-#{@subject_id}"}
-      class={["inline-flex items-center gap-1 font-mono text-[11px]", @class]}
+      class={["inline-flex items-center gap-0.5 font-mono text-[11px] sm:gap-1", @class]}
     >
       <button
         type="button"
@@ -496,7 +496,7 @@ defmodule TarakanWeb.CoreComponents do
         disabled={!@can_vote}
         aria-label="Upvote"
         class={[
-          "flex size-5 items-center justify-center transition disabled:cursor-not-allowed",
+          "flex size-9 items-center justify-center transition disabled:cursor-not-allowed sm:size-6",
           @summary.my_vote == 1 && "text-quote",
           @summary.my_vote != 1 && "text-ink-faint enabled:hover:text-quote"
         ]}
@@ -504,7 +504,7 @@ defmodule TarakanWeb.CoreComponents do
         <.icon name="hero-chevron-up-mini" class="size-4" />
       </button>
       <span class={[
-        "min-w-4 text-center tabular-nums",
+        "min-w-5 text-center tabular-nums",
         @summary.score > 0 && "text-quote",
         @summary.score < 0 && "text-signal",
         @summary.score == 0 && "text-ink-muted"
@@ -520,7 +520,7 @@ defmodule TarakanWeb.CoreComponents do
         disabled={!@can_vote}
         aria-label="Downvote"
         class={[
-          "flex size-5 items-center justify-center transition disabled:cursor-not-allowed",
+          "flex size-9 items-center justify-center transition disabled:cursor-not-allowed sm:size-6",
           @summary.my_vote == -1 && "text-signal",
           @summary.my_vote != -1 && "text-ink-faint enabled:hover:text-signal"
         ]}

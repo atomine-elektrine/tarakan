@@ -2,6 +2,7 @@ defmodule TarakanWeb.ExploreLive do
   use TarakanWeb, :live_view
 
   alias Tarakan.Activity
+  alias Tarakan.Epidemics
   alias Tarakan.Reputation
   alias TarakanWeb.Presence
 
@@ -10,11 +11,12 @@ defmodule TarakanWeb.ExploreLive do
   @search_scan_limit 200
   @presence_topic "explore:observers"
 
+  # Product language: Reports / Checks. Wire kinds stay :scan / :verdict internally.
   @kinds %{
     "all" => nil,
     "registrations" => :registration,
-    "reviews" => :scan,
-    "verdicts" => :verdict,
+    "reports" => :scan,
+    "checks" => :verdict,
     "comments" => :comment
   }
 
@@ -32,13 +34,14 @@ defmodule TarakanWeb.ExploreLive do
      |> assign(:page_title, "Explore")
      |> assign(
        :meta_description,
-       "What's hitting the public record: new repos, reviews, verdicts, discussion."
+       "Public record: Reports, Checks, registrations, discussion."
      )
      |> assign(:canonical_path, ~p"/explore")
      |> assign(:kind, "all")
      |> assign(:query, "")
      |> assign(:watcher_count, watcher_count())
      |> assign(:hot_findings, Activity.hot_findings())
+     |> assign(:epidemics, Epidemics.list_epidemics(min_repos: 2, days: 30, limit: 5))
      |> load_wire()}
   end
 
@@ -131,4 +134,6 @@ defmodule TarakanWeb.ExploreLive do
   defp ledger_time(%DateTime{} = datetime) do
     Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
   end
+
+  defp filter_active?(current, value), do: current == value
 end

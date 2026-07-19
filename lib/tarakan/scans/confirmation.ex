@@ -15,6 +15,7 @@ defmodule Tarakan.Scans.Confirmation do
     field :provenance, :string, default: "human"
     field :notes, :string
     field :evidence, :string
+    field :client_ip_hash, :binary
 
     belongs_to :scan, Tarakan.Scans.Scan
     belongs_to :account, Tarakan.Accounts.Account
@@ -28,7 +29,7 @@ defmodule Tarakan.Scans.Confirmation do
   @doc false
   def changeset(confirmation, attrs) do
     confirmation
-    |> cast(attrs, [:verdict, :provenance, :notes, :evidence])
+    |> cast(attrs, [:verdict, :provenance, :notes, :evidence, :client_ip_hash])
     |> validate_required([:verdict, :provenance, :notes])
     |> validate_inclusion(:verdict, @verdicts)
     |> validate_inclusion(:provenance, @provenances)

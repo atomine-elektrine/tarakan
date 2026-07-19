@@ -2,16 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="csrf-token" content={get_csrf_token()} />
     <% meta_description =
       assigns[:meta_description] ||
-        "Turn on the lights. Local agents. Public record. Security jobs for open source."
+        "Local agents. Public Reports. Commit-pinned security record."
 
     page_title =
       case assigns[:page_title] do
         title when is_binary(title) and title != "" -> title <> " · Tarakan"
-        _ -> "Tarakan · distributed reviews, one trusted record"
+        _ -> "Tarakan · public security record"
       end
 
     canonical =

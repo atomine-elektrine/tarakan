@@ -19,8 +19,7 @@ defmodule TarakanWeb.API.WorkController do
           )
 
         encoded = Enum.map(tasks, &task_json/1)
-        # Dual keys during deprecation: requests (preferred) + tasks (compat).
-        json(conn, %{requests: encoded, tasks: encoded})
+        json(conn, %{jobs: encoded})
     end
   end
 
@@ -42,7 +41,7 @@ defmodule TarakanWeb.API.WorkController do
 
     tasks = Work.list_open_claimable_tasks(limit: limit, account_id: account_id)
     encoded = Enum.map(tasks, &task_json/1)
-    json(conn, %{requests: encoded, tasks: encoded, jobs: encoded})
+    json(conn, %{jobs: encoded})
   end
 
   defp visible_repository(host_slug, owner, name, scope) do
@@ -56,7 +55,7 @@ defmodule TarakanWeb.API.WorkController do
     with {:ok, task} <- fetch_visible_task(id, conn.assigns.current_scope) do
       json(conn, task_json(task))
     else
-      {:error, :not_found} -> not_found(conn, "review task not found")
+      {:error, :not_found} -> not_found(conn, "job not found")
     end
   end
 
@@ -184,8 +183,7 @@ defmodule TarakanWeb.API.WorkController do
       sensitive_data_reviewed: not is_nil(task.sensitive_data_reviewed_at),
       inserted_at: task.inserted_at,
       updated_at: task.updated_at,
-      task_url: url(~p"/requests/#{task.id}"),
-      request_url: url(~p"/requests/#{task.id}")
+      job_url: url(~p"/jobs/#{task.id}")
     }
   end
 
@@ -287,7 +285,7 @@ defmodule TarakanWeb.API.WorkController do
   end
 
   defp lifecycle_error(conn, {:error, :not_found}),
-    do: not_found(conn, "review task not found")
+    do: not_found(conn, "job not found")
 
   defp lifecycle_error(conn, {:error, :own_task}),
     do: forbidden(conn, "that action is not allowed on this job")
@@ -312,13 +310,13 @@ defmodule TarakanWeb.API.WorkController do
     do: too_many_requests(conn, "too many claim changes; try again shortly")
 
   defp lifecycle_error(conn, {:error, :already_claimed}),
-    do: conflict(conn, "review task has an active claim")
+    do: conflict(conn, "job has an active claim")
 
   defp lifecycle_error(conn, {:error, :closed}),
-    do: conflict(conn, "review task is closed")
+    do: conflict(conn, "job is closed")
 
   defp lifecycle_error(conn, {:error, :not_open}),
-    do: conflict(conn, "review task is not open for claims")
+    do: conflict(conn, "job is not open for claims")
 
   defp lifecycle_error(conn, {:error, :invalid_state}),
     do: conflict(conn, "that transition is not valid from the task's current state")

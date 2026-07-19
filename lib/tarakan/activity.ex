@@ -131,6 +131,8 @@ defmodule Tarakan.Activity do
       |> having([vote], sum(vote.value) > 0)
       |> select([vote], %{subject_id: vote.subject_id, score: sum(vote.value)})
 
+    # Exclude pure unconfirmed single-run noise from the hot rail. Votes alone
+    # cannot promote an unchecked agent dump into the spotlight.
     rows =
       CanonicalFinding
       |> join(:inner, [canonical], score in subquery(vote_scores),
@@ -138,6 +140,12 @@ defmodule Tarakan.Activity do
       )
       |> join(:inner, [canonical], repository in assoc(canonical, :repository))
       |> where([_canonical, _score, repository], repository.listing_status == "listed")
+      |> where(
+        [canonical],
+        canonical.status in ["verified", "fixed"] or
+          canonical.confirmations_count > 0 or
+          canonical.detections_count >= 2
+      )
       |> order_by([_canonical, score], desc: score.score)
       |> order_by([canonical], desc: canonical.id)
       |> limit(^limit)

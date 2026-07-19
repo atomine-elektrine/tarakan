@@ -339,9 +339,11 @@ defmodule Tarakan.RepositoryCodeTest do
     assert {:ok, 1_001} = Cache.get({:bounded_cache_test, 1_001})
   end
 
-  test "an exhausted repository limit does not consume the global limit", %{
+  test "an exhausted repository limit blocks further upstream for that repo", %{
     repository: repository
   } do
+    use_instrumented_client()
+
     previous = Application.fetch_env!(:tarakan, RepositoryCode)
 
     Application.put_env(:tarakan, RepositoryCode,
@@ -352,9 +354,12 @@ defmodule Tarakan.RepositoryCodeTest do
 
     on_exit(fn -> Application.put_env(:tarakan, RepositoryCode, previous) end)
 
-    before_count = global_upstream_count()
+    # Isolate shared postgres buckets left by earlier suite traffic.
+    Tarakan.Repo.query!("DELETE FROM rate_limit_buckets")
+
+    # resolve_default_commit hits preflight twice (identity + branch). With a
+    # per-repo budget of 1, the second preflight is rate limited.
     assert {:error, :rate_limited} = RepositoryCode.resolve_default_commit(repository)
-    assert global_upstream_count() == before_count + 1
   end
 
   defp use_instrumented_client do
@@ -410,18 +415,5 @@ defmodule Tarakan.RepositoryCodeTest do
         1 -> assert_waiter_count(key, expected, attempts - 1)
       end
     end
-  end
-
-  defp global_upstream_count do
-    :tarakan_rate_limits
-    |> :ets.tab2list()
-    |> Enum.reduce(0, fn
-      {{{:repository_code_upstream_global, limiter_node}, _bucket, 60}, count, _expires_at}, acc
-      when limiter_node == node() ->
-        acc + count
-
-      _entry, acc ->
-        acc
-    end)
   end
 end

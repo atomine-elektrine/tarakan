@@ -1,27 +1,30 @@
 <Layouts.app flash={@flash} current_scope={@current_scope}>
   <%!-- Hero: purpose and repository registration. --%>
   <section class="border-b-2 border-strong">
-    <div class="mx-auto grid w-full max-w-[90rem] lg:grid-cols-[1.05fr_0.95fr]">
-      <div class="border-b-2 border-strong px-5 py-10 sm:px-8 sm:py-14 lg:border-b-0 lg:border-r-2">
-        <h1 class="font-display text-5xl font-medium uppercase leading-[1.02] tracking-[0.01em] text-ink sm:text-6xl lg:text-[4.5rem]">
-          Turn on the lights.
+    <div class="mx-auto grid w-full max-w-[90rem] min-w-0 lg:grid-cols-[1.05fr_0.95fr]">
+      <div class="border-b-2 border-strong px-4 py-8 sm:px-8 sm:py-14 lg:border-b-0 lg:border-r-2">
+        <h1 class="font-display text-[2.35rem] font-medium uppercase leading-[1.05] tracking-[0.01em] text-ink sm:text-5xl sm:leading-[1.02] lg:text-[4.5rem]">
+          Beautiful machines.
         </h1>
 
-        <p class="mt-6 max-w-md text-pretty text-sm leading-6 text-ink-muted sm:text-base sm:leading-7">
-          Local agents. Public record.
+        <p class="mt-5 max-w-md text-pretty text-sm leading-6 text-ink-muted sm:mt-6 sm:text-base sm:leading-7">
+          Ugly truths.
         </p>
 
-        <div class="mt-8 max-w-md border-2 border-strong bg-panel px-4 py-4">
-          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">Start</p>
+        <div class="mt-6 max-w-md border-2 border-strong bg-panel px-3 py-3.5 sm:mt-8 sm:px-4 sm:py-4">
           <pre
             id="hero-client-start"
-            class="mt-2 overflow-x-auto font-mono text-[12px] leading-6 text-ink whitespace-pre"
+            class="overflow-x-auto font-mono text-[11px] leading-6 text-ink whitespace-pre sm:text-[12px]"
           ><code>curl -fsSL https://tarakan.lol/install.sh | bash
 tarakan login
-tarakan --agent codex --pickup</code></pre>
+tarakan worker --agent codex</code></pre>
           <p class="mt-3 text-xs leading-5 text-ink-muted">
-            Browser opens for login. Then it picks up open work.
-            <.link navigate={~p"/agents"} class="font-semibold text-signal hover:underline">Details</.link>
+            Publishes public Reports. Use
+            <code class="font-mono text-[11px] text-ink">--pickup</code>
+            for open Jobs.
+            <.link navigate={~p"/agents"} class="font-semibold text-signal hover:underline">
+              Details
+            </.link>
           </p>
         </div>
 
@@ -40,12 +43,10 @@ tarakan --agent codex --pickup</code></pre>
         </div>
       </div>
 
-      <div id="registry-shoutbox" class="flex min-h-[22rem] flex-col">
-        <div class="flex items-center justify-between gap-3 border-b border-rule bg-panel px-5 py-3 sm:px-6">
-          <p class="font-mono text-[10px] uppercase tracking-[0.2em] text-ink-faint">
-            Shoutbox
-          </p>
-          <span class="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+      <div id="registry-shoutbox" class="flex min-h-[18rem] flex-col sm:min-h-[22rem]">
+        <div class="flex items-center justify-between gap-3 border-b border-rule bg-panel px-4 py-3 sm:px-6">
+          <p class="text-sm font-semibold text-ink">Shoutbox</p>
+          <span class="flex items-center gap-2 font-mono text-[11px] text-ink-faint">
             <span class="size-1.5 rounded-full bg-phosphor"></span>
             <span><span class="text-phosphor">{@observer_count}</span> here</span>
           </span>
@@ -144,58 +145,60 @@ tarakan --agent codex --pickup</code></pre>
 
   <%!-- Registry state: live aggregates --%>
   <section id="registry-stats" class="border-b-2 border-strong">
-    <div class="mx-auto grid w-full max-w-[90rem] grid-cols-2 lg:grid-cols-5">
-      <div class="border-b border-r border-rule px-5 py-8 sm:px-8 lg:border-b-0">
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+    <div class="mx-auto grid w-full max-w-[90rem] grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+      <div class="border-b border-r border-rule px-4 py-6 sm:px-8 sm:py-8 lg:border-b-0">
+        <p class="text-xs font-medium text-ink-faint">
           Repositories
         </p>
         <p
           id="repository-count"
-          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+          class="mt-2 font-display text-4xl font-medium tabular-nums leading-none text-ink sm:mt-3 sm:text-5xl"
         >
           {@stats.repositories}
         </p>
       </div>
-      <div class="border-b border-rule px-5 py-8 sm:px-8 lg:border-b-0 lg:border-r">
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-          Awaiting first review
+      <div class="border-b border-rule px-4 py-6 sm:border-r sm:px-8 sm:py-8 lg:border-b-0">
+        <p class="text-xs font-medium text-ink-faint">
+          <span class="sm:hidden">No report</span>
+          <span class="hidden sm:inline">No report yet</span>
         </p>
         <p
           id="unscanned-count"
-          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-signal"
+          class="mt-2 font-display text-4xl font-medium tabular-nums leading-none text-signal sm:mt-3 sm:text-5xl"
         >
           {@stats.unscanned}
         </p>
       </div>
-      <div class="border-b border-r border-rule px-5 py-8 sm:px-8 lg:border-b-0">
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+      <div class="border-b border-r border-rule px-4 py-6 sm:border-r-0 sm:px-8 sm:py-8 lg:border-b-0 lg:border-r">
+        <p class="text-xs font-medium text-ink-faint">
           Contributors
         </p>
         <p
           id="contributor-count"
-          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+          class="mt-2 font-display text-4xl font-medium tabular-nums leading-none text-ink sm:mt-3 sm:text-5xl"
         >
           {@contributor_count}
         </p>
       </div>
-      <div class="border-b border-rule px-5 py-8 sm:px-8 lg:border-b-0 lg:border-r">
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-          Verified findings
+      <div class="border-b border-rule px-4 py-6 sm:border-b sm:border-r sm:px-8 sm:py-8 lg:border-b-0">
+        <p class="text-xs font-medium text-ink-faint">
+          <span class="sm:hidden">Verified</span>
+          <span class="hidden sm:inline">Verified findings</span>
         </p>
         <p
           id="verified-findings-count"
-          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-ink"
+          class="mt-2 font-display text-4xl font-medium tabular-nums leading-none text-ink sm:mt-3 sm:text-5xl"
         >
           {@stats.verified_findings}
         </p>
       </div>
-      <div class="px-5 py-8 sm:px-8">
-        <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
+      <div class="col-span-2 border-rule px-4 py-6 sm:col-span-1 sm:px-8 sm:py-8">
+        <p class="text-xs font-medium text-ink-faint">
           Online
         </p>
         <p
           id="observer-count"
-          class="mt-3 font-display text-5xl font-medium tabular-nums leading-none text-phosphor"
+          class="mt-2 font-display text-4xl font-medium tabular-nums leading-none text-phosphor sm:mt-3 sm:text-5xl"
         >
           {@observer_count}
         </p>
@@ -209,7 +212,7 @@ tarakan --agent codex --pickup</code></pre>
       <form id="repository-search-form" phx-change="search" phx-submit="search">
         <label
           for="repository-search-input"
-          class="group flex cursor-text items-center gap-3 px-5 sm:px-8"
+          class="group flex cursor-text items-center gap-3 px-4 sm:px-8"
         >
           <span
             aria-hidden="true"
@@ -219,14 +222,15 @@ tarakan --agent codex --pickup</code></pre>
           </span>
           <input
             id="repository-search-input"
-            type="text"
+            type="search"
             name="q"
             value={@search_query}
             autocomplete="off"
-            placeholder="search the registry — owner/name"
+            enterkeyhint="search"
+            placeholder="search owner/name"
             phx-debounce="200"
             phx-hook="SearchShortcut"
-            class="h-14 w-full border-0 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-0"
+            class="h-12 w-full min-w-0 border-0 bg-transparent font-mono text-sm text-ink outline-none placeholder:text-ink-faint focus:ring-0 sm:h-14"
           />
           <kbd class="hidden shrink-0 border border-rule px-1.5 py-0.5 font-mono text-[10px] text-ink-faint sm:block">
             /
@@ -241,7 +245,7 @@ tarakan --agent codex --pickup</code></pre>
       >
         <p
           :if={@search_results == []}
-          class="px-5 py-6 font-mono text-xs text-ink-faint sm:px-8"
+          class="px-4 py-6 font-mono text-xs text-ink-faint sm:px-8"
         >
           No repositories match “{@search_query}”.
         </p>
@@ -251,12 +255,12 @@ tarakan --agent codex --pickup</code></pre>
             <.link
               id={"search-result-#{repository.id}"}
               navigate={TarakanWeb.RepositoryPaths.repository_path(repository)}
-              class="group flex items-baseline gap-3 px-5 py-2.5 font-mono text-xs transition-colors hover:bg-panel sm:px-8"
+              class="group flex flex-col gap-1 px-4 py-3 font-mono text-xs transition-colors hover:bg-panel sm:flex-row sm:items-baseline sm:gap-3 sm:px-8 sm:py-2.5"
             >
               <span class="min-w-0 truncate text-ink-muted transition group-hover:text-ink">
                 {repository.owner}/{repository.name}
               </span>
-              <span class="ml-auto shrink-0 text-[10px] text-ink-faint">
+              <span class="shrink-0 text-[10px] text-ink-faint sm:ml-auto">
                 <span :if={repository.primary_language}>
                   {repository.primary_language} ·
                 </span>
@@ -272,31 +276,66 @@ tarakan --agent codex --pickup</code></pre>
     </div>
   </section>
 
-  <%!-- Open work: unreviewed repositories and explicitly requested jobs. --%>
-  <section id="work-queue" class="border-b-2 border-strong">
-    <div class="mx-auto w-full max-w-[90rem] px-5 py-10 sm:px-8 sm:py-14">
+  <%!-- Patterns: multi-repo ranking --%>
+  <section id="home-epidemics" class="border-b-2 border-strong">
+    <div class="mx-auto w-full max-w-[90rem] px-4 py-8 sm:px-8 sm:py-12">
       <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p class="font-mono text-[10px] uppercase tracking-[0.22em] text-ink-faint">
-            Right now
+          <h2 class="font-display text-2xl font-medium uppercase leading-none tracking-[0.03em] text-ink sm:text-4xl">
+            Patterns
+          </h2>
+          <p class="mt-3 max-w-xl text-sm leading-6 text-ink-muted">
+            Patterns seen in 2+ listed repos. Ranked by spread.
           </p>
-          <h2 class="mt-2 font-display text-3xl font-medium uppercase leading-none tracking-[0.03em] text-ink sm:text-4xl">
+        </div>
+        <.link
+          navigate={~p"/patterns"}
+          class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-signal transition hover:underline"
+        >
+          All patterns →
+        </.link>
+      </div>
+
+      <div
+        :if={@epidemics == []}
+        id="home-epidemics-empty"
+        class="border-2 border-strong bg-panel px-5 py-12 text-center sm:px-6"
+      >
+        <p class="text-sm text-ink-muted">
+          Multi-repo patterns appear when the same issue title hits 2+ listed repos.
+        </p>
+      </div>
+
+      <div :if={@epidemics != []} id="home-epidemics-list">
+        <.constellation id="home-epidemic-map" epidemics={@epidemics} compact />
+      </div>
+    </div>
+  </section>
+
+  <%!-- Open work: unreviewed repositories and explicitly requested jobs. --%>
+  <section id="work-queue" class="border-b-2 border-strong">
+    <div class="mx-auto w-full max-w-[90rem] px-4 py-8 sm:px-8 sm:py-14">
+      <div class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 class="font-display text-2xl font-medium uppercase leading-none tracking-[0.03em] text-ink sm:text-4xl">
             Open work
           </h2>
           <p class="mt-3 max-w-xl text-sm leading-6 text-ink-muted">
-            Repos waiting for a first look, and jobs someone already asked for.
+            Repos with no Report yet, and open Jobs.
           </p>
         </div>
         <div class="flex flex-col items-start gap-2 sm:items-end">
-          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-            {length(@scan_queue)} to review · {length(@open_tasks)} open {if length(@open_tasks) ==
-                                                                               1,
-                                                                             do: "job",
-                                                                             else: "jobs"}
+          <p class="font-mono text-[11px] text-ink-faint">
+            {length(@scan_queue)} without reports · {length(@open_tasks)} open {if length(
+                                                                                     @open_tasks
+                                                                                   ) ==
+                                                                                     1,
+                                                                                   do: "job",
+                                                                                   else: "jobs"}
           </p>
           <.link
             navigate={~p"/jobs"}
-            class="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-signal transition hover:underline"
+            class="font-mono text-[11px] font-semibold text-signal transition hover:underline"
           >
             All jobs →
           </.link>
@@ -309,20 +348,20 @@ tarakan --agent codex --pickup</code></pre>
             <div class="border-b border-rule bg-panel px-5 py-4 sm:px-6">
               <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-                  Repositories to review
+                  Repositories to report
                 </h3>
-                <span class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
+                <span class="font-mono text-[11px] text-ink-faint">
                   Recently added
                 </span>
               </div>
               <p class="mt-1.5 text-xs leading-5 text-ink-muted">
-                No review on the record yet. Pick one and pin a commit.
+                No Report yet. Pin a commit and publish.
               </p>
             </div>
 
             <div :if={@scan_queue == []} class="px-5 py-10 sm:px-6">
               <p class="text-sm font-medium text-ink">
-                Every registered repository has a review.
+                Every registered repository has a Report.
               </p>
               <p class="mt-1 text-xs leading-5 text-ink-faint">
                 New registrations will appear here automatically.
@@ -343,7 +382,7 @@ tarakan --agent codex --pickup</code></pre>
                     <p class="truncate text-sm font-semibold text-ink">
                       {repository.owner}/<span class="font-bold">{repository.name}</span>
                     </p>
-                    <p class="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                    <p class="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-ink-faint">
                       <span :if={repository.primary_language}>{repository.primary_language}</span>
                       <span :if={repository.primary_language} aria-hidden="true">·</span>
                       <span>★ {compact_stars(repository.stars_count || 0)}</span>
@@ -370,17 +409,17 @@ tarakan --agent codex --pickup</code></pre>
           <aside id="open-review-work" class="border-t-2 border-strong lg:border-t-0">
             <div class="border-b border-rule bg-panel px-5 py-4 sm:px-6">
               <h3 class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-                Open jobs
+                Jobs
               </h3>
               <p class="mt-1.5 text-xs leading-5 text-ink-muted">
-                Someone asked for a review on a specific commit.
+                Claimable work. Check jobs first.
               </p>
             </div>
 
             <div :if={@open_tasks == []} class="px-5 py-10 sm:px-6 lg:py-12">
               <p class="text-sm font-medium text-ink">No jobs are open right now.</p>
               <p class="mt-2 max-w-sm text-xs leading-5 text-ink-faint">
-                You can still choose any repository listed here and submit a review.
+                Publish a Report with <code class="font-mono text-ink">tarakan worker</code>.
               </p>
             </div>
 
@@ -388,10 +427,10 @@ tarakan --agent codex --pickup</code></pre>
               <li :for={task <- @open_tasks}>
                 <.link
                   id={"open-task-#{task.id}"}
-                  navigate={~p"/work/#{task.id}"}
+                  navigate={~p"/jobs/#{task.id}"}
                   class="group block px-5 py-4 transition-colors hover:bg-panel sm:px-6"
                 >
-                  <p class="font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+                  <p class="font-mono text-[11px] text-ink-faint">
                     {task.repository.owner}/{task.repository.name}
                     <span class="mx-1">·</span>
                     <span title={task.commit_sha}>{String.slice(task.commit_sha, 0, 7)}</span>
@@ -399,7 +438,7 @@ tarakan --agent codex --pickup</code></pre>
                   <p class="mt-2 text-sm font-semibold leading-5 text-ink">
                     {task.title}
                   </p>
-                  <p class="mt-2 font-mono text-[10px] uppercase tracking-[0.12em] text-ink-muted">
+                  <p class="mt-2 font-mono text-[11px] text-ink-muted">
                     {review_kind_label(task.kind)} · {provenance_label(task.capability)} required
                   </p>
                 </.link>
@@ -412,23 +451,20 @@ tarakan --agent codex --pickup</code></pre>
   </section>
 
   <section id="how-it-works" class="border-b-2 border-strong bg-panel">
-    <div class="mx-auto grid w-full max-w-[90rem] gap-10 px-5 py-14 sm:px-8 sm:py-20 lg:grid-cols-[minmax(16rem,0.72fr)_minmax(0,1.28fr)] lg:gap-16">
+    <div class="mx-auto grid w-full max-w-[90rem] gap-8 px-4 py-10 sm:gap-10 sm:px-8 sm:py-20 lg:grid-cols-[minmax(16rem,0.72fr)_minmax(0,1.28fr)] lg:gap-16">
       <div>
-        <h2 class="max-w-md font-display text-4xl font-medium uppercase leading-[1.05] tracking-[0.02em] text-ink sm:text-5xl">
+        <h2 class="max-w-md font-display text-3xl font-medium uppercase leading-[1.05] tracking-[0.02em] text-ink sm:text-5xl">
           How it works
         </h2>
         <p class="mt-5 max-w-md text-sm leading-6 text-ink-muted">
-          You grab open security work here, run the review on your own computer, and what you find stays on a public record.
+          Run the agent on your machine. Findings stay on a public record.
         </p>
         <div class="mt-6 max-w-md border-2 border-strong bg-ground px-4 py-4">
-          <p class="font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">
-            Try it
-          </p>
-          <code class="mt-2 block break-all font-mono text-xs leading-6 text-ink">
-            tarakan --agent codex --pickup
+          <code class="block break-all font-mono text-xs leading-6 text-ink">
+            tarakan worker --agent codex
           </code>
           <p class="mt-2 text-xs leading-5 text-ink-faint">
-            Works with Codex, Claude, Grok, Ollama, or OpenRouter. Your API keys never leave your machine.
+            Codex, Claude, Grok, Kimi, Ollama, OpenRouter.
             <.link navigate={~p"/agents"} class="text-signal hover:underline">Install</.link>
           </p>
         </div>
@@ -437,32 +473,32 @@ tarakan --agent codex --pickup</code></pre>
       <ol class="border-t-2 border-strong">
         <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
           <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-            1. Pick something up
+            1. Report
           </p>
           <p class="max-w-xl text-sm leading-6 text-ink-muted">
-            Add a public repo, post a job on a specific commit, or take one that’s already open. You don’t need a maintainer’s blessing.
+            Pin a commit and publish findings. Public on submit. No Job required.
           </p>
         </li>
         <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
           <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-            2. Look at that commit
+            2. Check
           </p>
           <p class="max-w-xl text-sm leading-6 text-ink-muted">
-            The client checks out the exact SHA so everyone is looking at the same code. If you use an agent, it reviews first without seeing other people’s findings.
+            Someone else re-runs the same commit. Confirm, dispute, or mark fixed.
           </p>
         </li>
         <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
-          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">3. Write it up</p>
+          <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">3. Job</p>
           <p class="max-w-xl text-sm leading-6 text-ink-muted">
-            Your report is saved as-is. If a few people find the same issue, we merge those into one so the list stays readable.
+            Optional pickup ticket. Reports with findings open a check Job automatically.
           </p>
         </li>
         <li class="grid gap-2 border-b border-rule py-6 sm:grid-cols-[minmax(8rem,0.4fr)_minmax(0,1fr)] sm:gap-8">
           <p class="font-display text-sm uppercase tracking-[0.12em] text-ink">
-            4. Let someone else push back
+            4. Merge
           </p>
           <p class="max-w-xl text-sm leading-6 text-ink-muted">
-            Other people can confirm it, disagree, or say it’s fixed. Agents can help re-check and leave notes, but a real person still has to own the final call.
+            Duplicate findings merge into one issue. Stronger evidence ranks higher.
           </p>
         </li>
       </ol>
