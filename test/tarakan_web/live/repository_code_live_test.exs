@@ -8,7 +8,11 @@ defmodule TarakanWeb.RepositoryCodeLiveTest do
   alias Tarakan.Scans
 
   @default_commit_sha String.duplicate("7", 40)
-  @historical_commit_sha String.duplicate("8", 40)
+  # develop branch tip in the GitHub stub (must remain a real branch tip).
+  @develop_commit_sha String.duplicate("8", 40)
+  # A fetchable commit that is not the tip of any published branch (and not a
+  # special-cased stub SHA such as all-c truncated trees).
+  @historical_commit_sha String.duplicate("b", 40)
 
   setup do
     Cache.clear()
@@ -190,6 +194,39 @@ defmodule TarakanWeb.RepositoryCodeLiveTest do
       refute has_element?(view, "#code-tree")
       refute has_element?(view, "#code-file")
     end
+  end
+
+  test "branch switch opens another published branch tip", %{conn: conn} do
+    {:ok, view, _html} = live(conn, ~p"/github.com/openai/codex/code/#{@default_commit_sha}")
+    render_async(view, 1_000)
+
+    assert has_element?(view, "#code-branch-select")
+    assert has_element?(view, "#code-tree")
+
+    view
+    |> form("#code-branch-form", %{branch: "develop"})
+    |> render_change()
+
+    path = ~p"/github.com/openai/codex/code/#{@develop_commit_sha}"
+    assert_redirect(view, path)
+
+    {:ok, switched, _html} = live(conn, path)
+    render_async(switched, 1_000)
+
+    assert has_element?(switched, "#code-tree")
+    assert has_element?(switched, "#code-commit-sha", String.slice(@develop_commit_sha, 0, 7))
+    assert has_element?(switched, ~s(#code-branch-select option[value="develop"][selected]))
+  end
+
+  test "deep link to a non-default branch tip works", %{conn: conn} do
+    {:ok, view, _html} =
+      live(conn, ~p"/github.com/openai/codex/code/#{@develop_commit_sha}/README.md")
+
+    render_async(view, 1_000)
+
+    assert has_element?(view, "#code-file")
+    assert has_element?(view, "#code-commit-sha", String.slice(@develop_commit_sha, 0, 7))
+    assert has_element?(view, ~s(#code-branch-select option[value="develop"][selected]))
   end
 
   test "rejects encoded traversal and backslash paths at the route boundary", %{conn: conn} do

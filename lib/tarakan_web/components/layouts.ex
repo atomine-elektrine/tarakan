@@ -11,22 +11,22 @@ defmodule TarakanWeb.Layouts do
   # and other static content.
   embed_templates "layouts/*"
 
-  @doc """
-  The Tarakan mark: the letter Ж with Russo One's proportions - vertical tip
-  stubs, thick diagonals, pinched waist - rebuilt from straight facets only.
-  The Cyrillic letterform is shaped like an insect, and tarakan is the
-  Russian word for cockroach, so the mark is the name. Drawn in currentColor.
-  """
-  attr :class, :any, default: "size-5"
+  attr :class, :any, default: "h-6 w-6"
 
   def logo_mark(assigns) do
     ~H"""
-    <svg class={@class} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <rect x="10.5" y="3.5" width="3" height="17" />
-      <polygon points="3.4,3.5 7.3,3.5 7.3,5.2 12,7.9 12,12 3.4,7.0" />
-      <polygon points="20.6,3.5 16.7,3.5 16.7,5.2 12,7.9 12,12 20.6,7.0" />
-      <polygon points="3.4,20.5 7.3,20.5 7.3,18.8 12,16.1 12,12 3.4,17.0" />
-      <polygon points="20.6,20.5 16.7,20.5 16.7,18.8 12,16.1 12,12 20.6,17.0" />
+    <svg
+      class={@class}
+      viewBox="0 0 66 66"
+      fill="currentColor"
+      aria-hidden="true"
+      data-tarakan-logo
+    >
+      <rect x="25" y="0" width="16" height="66" />
+      <polygon points="0,0 25,25 25,33 0,23" />
+      <polygon points="66,0 41,25 41,33 66,23" />
+      <polygon points="0,66 25,41 25,33 0,43" />
+      <polygon points="66,66 41,41 41,33 66,43" />
     </svg>
     """
   end
@@ -105,7 +105,7 @@ defmodule TarakanWeb.Layouts do
             aria-label="Tarakan home"
             class="flex h-9 shrink-0 items-center gap-2 md:h-auto md:border-r-2 md:border-strong md:px-8"
           >
-            <.logo_mark class="size-5 text-signal" />
+            <.logo_mark class="h-6 w-6 text-signal" />
             <span class="font-display text-[15px] font-bold uppercase tracking-[0.12em] text-ink md:text-base md:tracking-[0.14em]">
               Tarakan
             </span>
@@ -453,10 +453,22 @@ defmodule TarakanWeb.Layouts do
         <div class="mx-auto flex w-full max-w-[90rem] flex-col gap-6 px-4 py-10 sm:px-8 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p class="flex items-center gap-2.5 font-display text-base font-bold uppercase tracking-[0.08em] text-ink">
-              <.logo_mark class="size-5 text-signal" /> Tarakan
+              <.logo_mark class="h-6 w-6 text-signal" /> Tarakan
             </p>
             <p class="mt-3 max-w-xs text-sm leading-6 text-ink-muted">
               Public disclosure by default.
+            </p>
+            <p class="mt-5 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint">
+              from
+              <a
+                id="footer-elektrine"
+                href="https://elektrine.com"
+                rel="noopener noreferrer"
+                target="_blank"
+                class="text-ink-muted transition hover:text-ink"
+              >
+                elektrine
+              </a>
             </p>
           </div>
 

@@ -264,16 +264,25 @@ defmodule TarakanWeb.RepositoryCodeLive do
     with {:ok, commit_sha} <- normalize_commit_sha(params["commit_sha"]),
          {:ok, path} <- normalize_route_path(params["path"]),
          {:ok, line_range, line_range_invalid?} <- parse_line_range(params["lines"]) do
-      prepare_request(
-        socket,
+      socket
+      |> prepare_request(
         :browse,
         commit_sha,
         path,
         line_range,
         line_range_invalid?
       )
+      |> sync_selected_branch(commit_sha)
     else
       {:error, reason} -> assign_error(socket, reason)
+    end
+  end
+
+  # After a branch switch (or deep link to a tip SHA), keep the picker in sync.
+  defp sync_selected_branch(socket, commit_sha) do
+    case RepositoryCode.branch_for_commit(socket.assigns.repository, commit_sha) do
+      {:ok, branch} -> assign(socket, :selected_branch, branch)
+      _unknown -> socket
     end
   end
 
@@ -334,12 +343,12 @@ defmodule TarakanWeb.RepositoryCodeLive do
   defp run_request(:browse, repository, commit_sha, path, skip_rate_limit) do
     opts = code_opts(skip_rate_limit)
 
-    with {:ok, current_commit_sha} <- RepositoryCode.resolve_default_commit(repository, opts),
-         true <- Plug.Crypto.secure_compare(current_commit_sha, commit_sha),
+    # Generic browser may open any *current* branch tip (not only default),
+    # but still rejects guessed historical SHAs that are not branch tips.
+    with :ok <- RepositoryCode.authorize_public_commit(repository, commit_sha),
          {:ok, result} <- RepositoryCode.browse(repository, commit_sha, path, opts) do
       {:ok, result}
     else
-      false -> {:error, :not_found}
       # Never show the old "busy network" page for GitHub REST quota.
       {:error, :rate_limited} -> {:error, :unavailable}
       {:error, reason} -> {:error, reason}

@@ -166,16 +166,90 @@ defmodule Tarakan.RepositoryCode do
   @spec list_branches(%Repository{}) ::
           {:ok, [String.t()]} | {:error, browse_error() | :invalid_reference}
   def list_branches(%Repository{} = repository) do
-    with {:ok, repository} <- canonical_repository(repository) do
-      if Repository.hosted?(repository) do
-        list_hosted_branches(repository)
-      else
-        list_github_branches(repository)
-      end
+    case list_branch_tips(repository) do
+      {:ok, tips} ->
+        names = Enum.map(tips, &elem(&1, 0))
+        {:ok, order_branches(names, repository.default_branch)}
+
+      error ->
+        error
     end
   end
 
   def list_branches(_repository), do: {:error, :not_found}
+
+  @doc """
+  Current branch tips as `{name, full_sha}` pairs. Default branch is first when
+  known. One network round-trip for GitHub mirrors (`ls-remote --heads`).
+  """
+  @spec list_branch_tips(%Repository{}) ::
+          {:ok, [{String.t(), String.t()}]} | {:error, browse_error() | :invalid_reference}
+  def list_branch_tips(%Repository{} = repository) do
+    with {:ok, repository} <- canonical_repository(repository) do
+      if Repository.hosted?(repository) do
+        list_hosted_branch_tips(repository)
+      else
+        list_github_branch_tips(repository)
+      end
+    end
+  end
+
+  def list_branch_tips(_repository), do: {:error, :not_found}
+
+  @doc """
+  Authorizes a generic (non-finding) code-browser URL: the commit must be the
+  tip of a currently published branch, not an arbitrary historical SHA.
+  """
+  @spec authorize_public_commit(%Repository{}, String.t()) ::
+          :ok | {:error, browse_error() | :invalid_reference}
+  def authorize_public_commit(%Repository{} = repository, commit_sha)
+      when is_binary(commit_sha) do
+    with {:ok, commit_sha} <- normalize_commit_sha(commit_sha),
+         {:ok, tips} <- list_branch_tips(repository) do
+      if Enum.any?(tips, fn {_name, sha} -> sha_eq?(sha, commit_sha) end) do
+        :ok
+      else
+        {:error, :not_found}
+      end
+    end
+  end
+
+  def authorize_public_commit(_repository, _commit_sha), do: {:error, :not_found}
+
+  @doc """
+  Picks a branch name whose tip is `commit_sha`. Prefers the default branch
+  when several refs share the tip.
+  """
+  @spec branch_for_commit(%Repository{}, String.t()) ::
+          {:ok, String.t()} | {:error, browse_error() | :invalid_reference | :not_found}
+  def branch_for_commit(%Repository{} = repository, commit_sha) when is_binary(commit_sha) do
+    with {:ok, commit_sha} <- normalize_commit_sha(commit_sha),
+         {:ok, tips} <- list_branch_tips(repository) do
+      matching =
+        tips
+        |> Enum.filter(fn {_name, sha} -> sha_eq?(sha, commit_sha) end)
+        |> Enum.map(&elem(&1, 0))
+
+      cond do
+        matching == [] ->
+          {:error, :not_found}
+
+        is_binary(repository.default_branch) and repository.default_branch in matching ->
+          {:ok, repository.default_branch}
+
+        true ->
+          {:ok, hd(matching)}
+      end
+    end
+  end
+
+  def branch_for_commit(_repository, _commit_sha), do: {:error, :not_found}
+
+  defp sha_eq?(a, b) when is_binary(a) and is_binary(b) and byte_size(a) == byte_size(b) do
+    Plug.Crypto.secure_compare(a, b)
+  end
+
+  defp sha_eq?(_a, _b), do: false
 
   # A hosted repository's HEAD is authoritative locally; an unborn HEAD is
   # the normal state of a repository nothing has been pushed to yet.
@@ -242,38 +316,65 @@ defmodule Tarakan.RepositoryCode do
     end
   end
 
-  defp list_hosted_branches(repository) do
-    case Local.branches(Storage.dir(repository)) do
-      {:ok, names} -> {:ok, order_branches(names, repository.default_branch)}
-      :miss -> {:error, :unavailable}
+  defp list_hosted_branch_tips(repository) do
+    dir = Storage.dir(repository)
+
+    case Local.branches(dir) do
+      {:ok, names} ->
+        tips =
+          names
+          |> order_branches(repository.default_branch)
+          |> Enum.flat_map(fn name ->
+            case Local.branch_head(dir, name) do
+              {:ok, sha} -> [{name, sha}]
+              :miss -> []
+            end
+          end)
+
+        {:ok, tips}
+
+      :miss ->
+        {:error, :unavailable}
     end
   end
 
-  defp list_github_branches(repository) do
-    key = {:github_branches, repository.github_id}
+  defp list_github_branch_tips(repository) do
+    key = {:github_branch_tips, repository.github_id}
 
     Cache.fetch(key, cache_ttl(:head_cache_ttl_ms, @head_ttl_ms), fn ->
       if RepositoryMirror.enabled?() do
-        case RepositoryMirror.list_remote_heads(repository) do
-          {:ok, names} ->
-            {:ok, order_branches(names, repository.default_branch)}
+        case RepositoryMirror.list_remote_head_tips(repository) do
+          {:ok, tips} ->
+            {:ok, order_branch_tips(tips, repository.default_branch)}
 
           {:error, reason} ->
             {:error, map_git_error(reason)}
         end
       else
-        list_github_branches_via_rest(repository)
+        list_github_branch_tips_via_rest(repository)
       end
     end)
   end
 
-  defp list_github_branches_via_rest(repository) do
+  defp list_github_branch_tips_via_rest(repository) do
     if rest_fallback_enabled?() do
       with :ok <- upstream_preflight(repository),
            {:ok, metadata} <- verify_public_identity(repository),
            repository = rebind_identity(repository, metadata),
            {:ok, names} <- GitHub.list_branches(repository.owner, repository.name) do
-        {:ok, order_branches(names, repository.default_branch || metadata[:default_branch])}
+        default = repository.default_branch || metadata[:default_branch]
+
+        tips =
+          names
+          |> order_branches(default)
+          |> Enum.flat_map(fn name ->
+            case fetch_branch_head(repository, name) do
+              {:ok, commit} -> [{name, commit.sha}]
+              _error -> []
+            end
+          end)
+
+        {:ok, tips}
       end
     else
       {:error, :unavailable}
@@ -295,6 +396,23 @@ defmodule Tarakan.RepositoryCode do
       true ->
         names
     end
+  end
+
+  defp order_branch_tips(tips, default_branch) do
+    tips =
+      tips
+      |> Enum.reject(fn {name, sha} -> name in [nil, ""] or not is_binary(sha) end)
+      |> Enum.uniq_by(&elem(&1, 0))
+
+    names = order_branches(Enum.map(tips, &elem(&1, 0)), default_branch)
+    by_name = Map.new(tips)
+
+    Enum.flat_map(names, fn name ->
+      case Map.fetch(by_name, name) do
+        {:ok, sha} -> [{name, sha}]
+        :error -> []
+      end
+    end)
   end
 
   defp normalize_branch_name(branch) when is_binary(branch) do

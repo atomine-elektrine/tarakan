@@ -103,23 +103,40 @@ defmodule Tarakan.RepositoryMirror do
   Lists remote branch names via `git ls-remote --heads` (no REST).
   """
   def list_remote_heads(%Repository{} = repository) do
+    case list_remote_head_tips(repository) do
+      {:ok, tips} -> {:ok, Enum.map(tips, &elem(&1, 0))}
+      error -> error
+    end
+  end
+
+  def list_remote_heads(_repository), do: {:error, :invalid_reference}
+
+  @doc """
+  Lists remote branch tips as `{name, full_sha}` pairs via `git ls-remote --heads`.
+  """
+  def list_remote_head_tips(%Repository{} = repository) do
     url = remote_url(repository)
     dir = System.tmp_dir!()
 
     case run_git(dir, ["ls-remote", "--heads", url], 60) do
       {:ok, output} ->
-        names =
+        tips =
           output
           |> String.split("\n", trim: true)
-          |> Enum.map(fn line ->
+          |> Enum.flat_map(fn line ->
             case String.split(line, "\t") do
-              [_sha, "refs/heads/" <> name] -> name
-              _ -> nil
+              [sha, "refs/heads/" <> name] ->
+                case Local.validate_sha(sha) do
+                  {:ok, sha} when name != "" -> [{name, sha}]
+                  _invalid -> []
+                end
+
+              _other ->
+                []
             end
           end)
-          |> Enum.reject(&is_nil/1)
 
-        {:ok, names}
+        {:ok, tips}
 
       {:error, {status, output}} ->
         Logger.warning(
@@ -131,7 +148,7 @@ defmodule Tarakan.RepositoryMirror do
     end
   end
 
-  def list_remote_heads(_repository), do: {:error, :invalid_reference}
+  def list_remote_head_tips(_repository), do: {:error, :invalid_reference}
 
   @doc "Removes a repository's mirror entirely (identity changed / went private)."
   def delete(github_id) when is_integer(github_id) do

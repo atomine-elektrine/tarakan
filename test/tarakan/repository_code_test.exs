@@ -237,6 +237,16 @@ defmodule Tarakan.RepositoryCodeTest do
     assert sha == String.duplicate("8", 40)
   end
 
+  test "authorize_public_commit allows any current branch tip", %{repository: repository} do
+    develop = String.duplicate("8", 40)
+    historical = String.duplicate("b", 40)
+
+    assert :ok = RepositoryCode.authorize_public_commit(repository, @default_commit_sha)
+    assert :ok = RepositoryCode.authorize_public_commit(repository, develop)
+    assert {:error, :not_found} = RepositoryCode.authorize_public_commit(repository, historical)
+    assert {:ok, "develop"} = RepositoryCode.branch_for_commit(repository, develop)
+  end
+
   test "rename adoption is not required for code browse at a pinned commit" do
     repository =
       Repo.insert!(%Tarakan.Repositories.Repository{
