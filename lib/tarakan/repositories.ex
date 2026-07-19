@@ -525,12 +525,33 @@ defmodule Tarakan.Repositories do
       {:ok, %{repository: inserted_repository}} ->
         broadcast_registration(inserted_repository)
         Tarakan.Activity.broadcast_registration(inserted_repository)
+        schedule_default_mirror(inserted_repository)
         {:ok, inserted_repository}
 
       {:error, _step, reason, _changes} ->
         {:error, reason}
     end
   end
+
+  # Warm the git mirror for default HEAD so code/scans avoid REST.
+  defp schedule_default_mirror(%Repository{host: "github.com", id: id} = repository)
+       when is_integer(id) do
+    if Tarakan.RepositoryMirror.enabled?() do
+      ref = repository.default_branch || "HEAD"
+
+      %{repository_id: id, ref: ref}
+      |> Tarakan.Sync.MirrorRepository.new()
+      |> Oban.insert()
+    end
+
+    :ok
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  defp schedule_default_mirror(_), do: :ok
 
   @doc false
   def registration_quota(_repo, %Account{platform_role: role})

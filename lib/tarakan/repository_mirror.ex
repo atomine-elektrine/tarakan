@@ -1,19 +1,15 @@
 defmodule Tarakan.RepositoryMirror do
   @moduledoc """
-  Content-addressed local mirror of hot repositories.
+  Content-addressed local mirror of public GitHub repositories.
 
-  Mirrors are bare git repositories fetched over the git protocol - which is
-  not metered by GitHub's API rate limits - holding exactly the pinned
-  commits Tarakan serves, with trees and small blobs
-  (`--filter=blob:limit=524288` matches the source-preview cap). Reads never
-  touch the network (`GIT_NO_LAZY_FETCH`); anything absent or abnormal
-  returns `:miss` and the caller falls back to the REST API.
+  Mirrors are bare git repositories fetched over the **git protocol** (HTTPS
+  by default) — not metered by GitHub's REST API rate limits. Reads never
+  touch the network (`GIT_NO_LAZY_FETCH`). Missing commits are filled with
+  `ensure_commit/2` / `mirror/2` via `git fetch`.
 
-  Safety posture: repositories stay bare (no checkout), hooks are disabled,
-  auth prompts are off, objects are fsck'd on transfer, and every git
-  invocation runs under a hard wall-clock timeout (see `Tarakan.Git.Local`).
-  Mirror directories are keyed by the immutable host id, so renames never
-  orphan them; identity eviction deletes them.
+  Safety: bare only, hooks disabled, no auth prompts, fsck on transfer,
+  wall-clock timeouts (`Tarakan.Git.Local`). Directories are keyed by
+  immutable `github_id`.
   """
 
   alias Tarakan.Git.Local
@@ -24,6 +20,7 @@ defmodule Tarakan.RepositoryMirror do
   @max_blob_bytes 512 * 1_024
   @default_fetch_timeout_seconds 300
   @default_remote_url_template "https://github.com/:owner/:name.git"
+  @full_sha ~r/\A[0-9a-f]{40}\z/i
 
   ## Configuration
 
@@ -35,9 +32,9 @@ defmodule Tarakan.RepositoryMirror do
     Path.join([config!(:root), "github.com", "#{github_id}.git"])
   end
 
-  ## Mirroring (called from the Oban worker)
+  ## Mirroring
 
-  @doc "Fetches one exact commit into the repository's bare mirror."
+  @doc "Fetches one exact commit into the repository's bare mirror via git."
   def mirror(%Repository{github_id: github_id} = repository, commit_sha)
       when is_integer(github_id) do
     with {:ok, commit_sha} <- Local.validate_sha(commit_sha),
@@ -48,6 +45,59 @@ defmodule Tarakan.RepositoryMirror do
   end
 
   def mirror(_repository, _commit_sha), do: {:error, :invalid_reference}
+
+  @doc """
+  Ensures `commit_sha` is present locally, fetching over git if needed.
+
+  Returns `:ok` when the commit can be read from the mirror.
+  """
+  def ensure_commit(%Repository{github_id: github_id} = repository, commit_sha)
+      when is_integer(github_id) do
+    cond do
+      not enabled?() ->
+        {:error, :disabled}
+
+      has_commit?(github_id, commit_sha) ->
+        :ok
+
+      true ->
+        case mirror(repository, commit_sha) do
+          {:ok, :mirrored} -> :ok
+          {:error, reason} -> {:error, reason}
+        end
+    end
+  end
+
+  def ensure_commit(_repository, _commit_sha), do: {:error, :invalid_reference}
+
+  @doc """
+  Resolves a remote ref to a full commit SHA via `git ls-remote` (no REST).
+
+  `ref` may be `"HEAD"`, `"main"`, `"refs/heads/main"`, etc.
+  """
+  def ls_remote_sha(repository, ref \\ "HEAD")
+
+  def ls_remote_sha(%Repository{} = repository, ref) when is_binary(ref) do
+    ref = normalize_remote_ref(ref)
+    url = remote_url(repository)
+    # Any existing directory works; ls-remote does not need a repo.
+    dir = System.tmp_dir!()
+
+    case run_git(dir, ["ls-remote", url, ref], 60) do
+      {:ok, output} ->
+        parse_ls_remote_sha(output)
+
+      {:error, {status, output}} ->
+        Logger.warning(
+          "ls-remote failed for #{repository.owner}/#{repository.name} " <>
+            "(status #{inspect(status)}): #{String.slice(to_string(output), 0, 300)}"
+        )
+
+        {:error, :fetch_failed}
+    end
+  end
+
+  def ls_remote_sha(_repository, _ref), do: {:error, :invalid_reference}
 
   @doc "Removes a repository's mirror entirely (identity changed / went private)."
   def delete(github_id) when is_integer(github_id) do
@@ -146,6 +196,36 @@ defmodule Tarakan.RepositoryMirror do
     end
   end
 
+  defp normalize_remote_ref("HEAD"), do: "HEAD"
+
+  defp normalize_remote_ref(ref) do
+    cond do
+      String.starts_with?(ref, "refs/") -> ref
+      true -> "refs/heads/#{ref}"
+    end
+  end
+
+  defp parse_ls_remote_sha(output) when is_binary(output) do
+    line =
+      output
+      |> String.split("\n", trim: true)
+      |> List.first()
+
+    case line && String.split(line, "\t") do
+      [sha | _] when is_binary(sha) ->
+        sha = String.downcase(String.trim(sha))
+
+        if Regex.match?(@full_sha, sha) do
+          {:ok, sha}
+        else
+          {:error, :fetch_failed}
+        end
+
+      _ ->
+        {:error, :not_found}
+    end
+  end
+
   defp remote_url(repository) do
     config(:remote_url_template, @default_remote_url_template)
     |> String.replace(":owner", repository.owner)
@@ -153,11 +233,10 @@ defmodule Tarakan.RepositoryMirror do
   end
 
   defp run_git(dir, args, timeout_seconds \\ 30) do
+    # Public git HTTPS needs no token. Optional GITHUB_TOKEN only if configured.
     Local.run(dir, args, timeout_seconds: timeout_seconds, config: auth_config_pairs())
   end
 
-  # The auth header travels through the environment so the token never
-  # appears in argv.
   defp auth_config_pairs do
     case api_token() do
       nil -> []
@@ -166,7 +245,7 @@ defmodule Tarakan.RepositoryMirror do
   end
 
   defp api_token do
-    case Application.fetch_env!(:tarakan, :github)[:api_token] do
+    case Application.get_env(:tarakan, :github, [])[:api_token] do
       token when is_binary(token) and token != "" -> token
       _missing -> nil
     end

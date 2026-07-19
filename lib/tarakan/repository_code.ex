@@ -62,7 +62,7 @@ defmodule Tarakan.RepositoryCode do
            {:ok, repository} <- current_identity(repository),
            {:ok, commit} <- fetch_commit(repository, commit_sha),
            {:ok, result} <- browse_commit_path(repository, commit, path, false),
-           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
+           :ok <- maybe_final_identity_check(repository, opts) do
         maybe_enqueue_mirror(repository, commit_sha)
         {:ok, result}
       end
@@ -194,11 +194,29 @@ defmodule Tarakan.RepositoryCode do
   end
 
   defp resolve_github_branch(repository, branch) do
-    with {:ok, metadata} <- verify_public_identity(repository),
-         repository = rebind_identity(repository, metadata),
-         {:ok, commit} <- fetch_branch_head(repository, branch),
-         :ok <- cache_commit(repository, commit) do
-      {:ok, commit.sha}
+    # Prefer unlimited git protocol; REST only if mirror/ls-remote cannot answer.
+    case resolve_github_branch_via_git(repository, branch) do
+      {:ok, sha} ->
+        {:ok, sha}
+
+      {:error, _reason} ->
+        with {:ok, metadata} <- verify_public_identity(repository),
+             repository = rebind_identity(repository, metadata),
+             {:ok, commit} <- fetch_branch_head(repository, branch),
+             :ok <- cache_commit(repository, commit) do
+          {:ok, commit.sha}
+        end
+    end
+  end
+
+  defp resolve_github_branch_via_git(repository, branch) do
+    if RepositoryMirror.enabled?() do
+      with {:ok, sha} <- RepositoryMirror.ls_remote_sha(repository, branch || "HEAD"),
+           :ok <- RepositoryMirror.ensure_commit(repository, sha) do
+        {:ok, sha}
+      end
+    else
+      {:error, :unavailable}
     end
   end
 
@@ -424,11 +442,9 @@ defmodule Tarakan.RepositoryCode do
     end)
   end
 
-  # For GitHub repositories, the local mirror serves hot repositories
-  # without touching the metered API; anything it cannot answer falls
-  # through to GitHub. Hosted repositories read only their own bare
-  # repository - there is no upstream to fall back to. All sources feed the
-  # same validation pipeline.
+  # GitHub path: prefer the local git mirror (unlimited vs REST). On miss we
+  # `git fetch` the commit into the mirror, then re-read. REST is only a
+  # last-resort fallback when mirrors are disabled or git fails.
   defp source_fetch_commit(repository, commit_sha) do
     if Repository.hosted?(repository) do
       case Local.read_commit(Storage.dir(repository), commit_sha) do
@@ -436,10 +452,11 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :not_found}
       end
     else
-      case RepositoryMirror.read_commit(repository.github_id, commit_sha) do
-        {:ok, commit} -> {:ok, commit}
-        :miss -> GitHub.fetch_commit(repository.owner, repository.name, commit_sha)
-      end
+      github_object(repository, commit_sha, fn ->
+        RepositoryMirror.read_commit(repository.github_id, commit_sha)
+      end, fn ->
+        GitHub.fetch_commit(repository.owner, repository.name, commit_sha)
+      end)
     end
   end
 
@@ -450,9 +467,30 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :not_found}
       end
     else
-      case RepositoryMirror.read_tree(repository.github_id, tree_sha, recursive) do
-        {:ok, tree} -> {:ok, tree}
-        :miss -> GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
+      read = fn -> RepositoryMirror.read_tree(repository.github_id, tree_sha, recursive) end
+
+      case read.() do
+        {:ok, tree} ->
+          {:ok, tree}
+
+        :miss ->
+          if RepositoryMirror.enabled?() do
+            _ = ensure_default_mirrored(repository)
+
+            case read.() do
+              {:ok, tree} ->
+                {:ok, tree}
+
+              :miss ->
+                rest_fallback(repository, fn ->
+                  GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
+                end)
+            end
+          else
+            rest_fallback(repository, fn ->
+              GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
+            end)
+          end
       end
     end
   end
@@ -464,15 +502,96 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :not_found}
       end
     else
-      case RepositoryMirror.read_blob(repository.github_id, blob_sha) do
-        {:ok, blob} -> {:ok, blob}
-        :miss -> GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
+      read = fn -> RepositoryMirror.read_blob(repository.github_id, blob_sha) end
+
+      case read.() do
+        {:ok, blob} ->
+          {:ok, blob}
+
+        :miss ->
+          if RepositoryMirror.enabled?() do
+            _ = ensure_default_mirrored(repository)
+
+            case read.() do
+              {:ok, blob} ->
+                {:ok, blob}
+
+              :miss ->
+                rest_fallback(repository, fn ->
+                  GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
+                end)
+            end
+          else
+            rest_fallback(repository, fn ->
+              GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
+            end)
+          end
       end
     end
   end
 
-  # Hot-tier admission: a successfully served commit is worth mirroring.
-  # Never allowed to break the request path.
+  defp github_object(repository, commit_sha, read_fun, rest_fun) do
+    case read_fun.() do
+      {:ok, value} ->
+        {:ok, value}
+
+      :miss ->
+        case RepositoryMirror.ensure_commit(repository, commit_sha) do
+          :ok ->
+            case read_fun.() do
+              {:ok, value} -> {:ok, value}
+              :miss -> rest_fallback(repository, rest_fun)
+            end
+
+          {:error, _reason} ->
+            rest_fallback(repository, rest_fun)
+        end
+    end
+  end
+
+  defp ensure_default_mirrored(%Repository{} = repository) do
+    if RepositoryMirror.enabled?() do
+      with {:ok, sha} <- RepositoryMirror.ls_remote_sha(repository, "HEAD") do
+        RepositoryMirror.ensure_commit(repository, sha)
+      end
+    else
+      {:error, :disabled}
+    end
+  end
+
+  defp rest_fallback(repository, fun) when is_function(fun, 0) do
+    if rest_fallback_enabled?() do
+      with :ok <- upstream_preflight(repository),
+           result <- fun.(),
+           # Only REST paths re-check public identity (git fetch already fails closed).
+           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
+        result
+      end
+    else
+      {:error, :unavailable}
+    end
+  end
+
+  defp rest_fallback_enabled? do
+    :tarakan
+    |> Application.get_env(Tarakan.RepositoryMirror, [])
+    |> Keyword.get(:rest_fallback, true)
+  end
+
+  # Operators skipping rate limits also skip the mandatory REST identity re-check
+  # so mass code browsing stays on the git mirror path only.
+  defp maybe_final_identity_check(repository, opts) do
+    if Keyword.get(opts, :skip_rate_limit, false) or Process.get(:tarakan_skip_code_rate_limit) do
+      :ok
+    else
+      case verify_public_identity(repository, force: true) do
+        {:ok, _} -> :ok
+        {:error, reason} -> {:error, reason}
+      end
+    end
+  end
+
+  # Hot-tier admission: keep background mirror warm. Never break the request.
   defp maybe_enqueue_mirror(repository, commit_sha) do
     if not Repository.hosted?(repository) and RepositoryMirror.enabled?() and
          not RepositoryMirror.has_commit?(repository.github_id, commit_sha) do
@@ -488,23 +607,10 @@ defmodule Tarakan.RepositoryCode do
     _kind, _reason -> :ok
   end
 
-  defp cached_fetch(repository, key, fetch) do
-    if Repository.hosted?(repository) do
-      # Hosted reads are local and identity is canonical by construction:
-      # no upstream rate limit and no host identity to re-verify.
-      Cache.fetch(key, cache_ttl(:immutable_cache_ttl_ms, @immutable_ttl_ms), fetch)
-    else
-      Cache.fetch(key, cache_ttl(:immutable_cache_ttl_ms, @immutable_ttl_ms), fn ->
-        with :ok <- upstream_preflight(repository) do
-          fetch_result = fetch.()
-
-          case verify_public_identity(repository, force: true) do
-            {:ok, _metadata} -> fetch_result
-            {:error, reason} -> {:error, reason}
-          end
-        end
-      end)
-    end
+  defp cached_fetch(_repository, key, fetch) do
+    # Hosted + mirrored git reads are local. REST identity is checked only in
+    # rest_fallback/2 when the API is actually used.
+    Cache.fetch(key, cache_ttl(:immutable_cache_ttl_ms, @immutable_ttl_ms), fetch)
   end
 
   defp cache_commit(repository, commit) do
