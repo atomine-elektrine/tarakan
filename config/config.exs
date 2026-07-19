@@ -50,6 +50,8 @@ config :tarakan, Tarakan.RepositoryCode,
 
 config :tarakan, Tarakan.RepositoryMirror,
   enabled: true,
+  # Production code browse uses git mirrors only (no GitHub REST for objects).
+  rest_fallback: false,
   root: "priv/mirrors"
 
 config :tarakan, Tarakan.HostedRepositories,

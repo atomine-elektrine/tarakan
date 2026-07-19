@@ -99,6 +99,40 @@ defmodule Tarakan.RepositoryMirror do
 
   def ls_remote_sha(_repository, _ref), do: {:error, :invalid_reference}
 
+  @doc """
+  Lists remote branch names via `git ls-remote --heads` (no REST).
+  """
+  def list_remote_heads(%Repository{} = repository) do
+    url = remote_url(repository)
+    dir = System.tmp_dir!()
+
+    case run_git(dir, ["ls-remote", "--heads", url], 60) do
+      {:ok, output} ->
+        names =
+          output
+          |> String.split("\n", trim: true)
+          |> Enum.map(fn line ->
+            case String.split(line, "\t") do
+              [_sha, "refs/heads/" <> name] -> name
+              _ -> nil
+            end
+          end)
+          |> Enum.reject(&is_nil/1)
+
+        {:ok, names}
+
+      {:error, {status, output}} ->
+        Logger.warning(
+          "ls-remote --heads failed for #{repository.owner}/#{repository.name} " <>
+            "(status #{inspect(status)}): #{String.slice(to_string(output), 0, 300)}"
+        )
+
+        {:error, :fetch_failed}
+    end
+  end
+
+  def list_remote_heads(_repository), do: {:error, :invalid_reference}
+
   @doc "Removes a repository's mirror entirely (identity changed / went private)."
   def delete(github_id) when is_integer(github_id) do
     if enabled?() do

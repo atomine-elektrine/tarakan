@@ -4,9 +4,13 @@ defmodule Tarakan.RepositoryCode do
 
   The browser never checks out or executes repository content. It starts at
   the tree SHA returned for the requested full commit SHA and follows only
-  child object SHAs. GitHub-registered repositories are read from the local
-  mirror with a REST API fallback; Tarakan-hosted repositories are read from
-  their bare repository on disk and never touch the network.
+  child object SHAs. GitHub-registered repositories are served from local
+  git mirrors (git fetch / ls-remote) — not the GitHub REST API. Tarakan-hosted
+  repositories are read from their bare repository on disk and never touch
+  the network.
+
+  REST object/identity calls are gated behind `rest_fallback` (enabled only in
+  tests when mirrors are off so the stub GitHub client can drive unit tests).
   """
 
   alias Tarakan.Git.Local
@@ -82,8 +86,7 @@ defmodule Tarakan.RepositoryCode do
            {:ok, path} <- RepositoryPath.normalize(path),
            {:ok, repository} <- current_identity(repository),
            {:ok, commit} <- fetch_commit(repository, commit_sha),
-           {:ok, %Tree{} = tree} <- browse_commit_path(repository, commit, path, recursive),
-           {:ok, _metadata} <- verify_public_identity(repository, force: true) do
+           {:ok, %Tree{} = tree} <- browse_commit_path(repository, commit, path, recursive) do
         {:ok, tree}
       else
         {:ok, %File{}} -> {:error, :not_a_directory}
@@ -117,7 +120,7 @@ defmodule Tarakan.RepositoryCode do
     end
   end
 
-  # Prefer git (no REST quota). Only hit the API if ls-remote/fetch cannot answer.
+  # Git protocol only (no REST).
   defp resolve_github_default_commit(repository) do
     branch =
       case repository.default_branch do
@@ -125,46 +128,12 @@ defmodule Tarakan.RepositoryCode do
         _ -> "HEAD"
       end
 
-    case resolve_github_branch_via_git(repository, branch) do
+    case resolve_github_branch(repository, branch) do
       {:ok, sha} ->
         {:ok, sha}
 
       {:error, _} ->
-        case resolve_github_branch_via_git(repository, "HEAD") do
-          {:ok, sha} ->
-            {:ok, sha}
-
-          {:error, _} ->
-            resolve_github_default_commit_via_api(repository)
-        end
-    end
-  end
-
-  defp resolve_github_default_commit_via_api(repository) do
-    case verify_public_identity(repository) do
-      {:ok, metadata} ->
-        repository = rebind_identity(repository, metadata)
-
-        branch =
-          cond do
-            is_binary(metadata[:default_branch]) and metadata[:default_branch] != "" ->
-              metadata[:default_branch]
-
-            is_binary(repository.default_branch) and repository.default_branch != "" ->
-              repository.default_branch
-
-            true ->
-              "main"
-          end
-
-        resolve_branch_commit(repository, branch)
-
-      # Do not fail the whole code view when GitHub REST is exhausted.
-      {:error, :rate_limited} ->
-        {:error, :unavailable}
-
-      {:error, reason} ->
-        {:error, reason}
+        resolve_github_branch(repository, "HEAD")
     end
   end
 
@@ -192,8 +161,7 @@ defmodule Tarakan.RepositoryCode do
   @doc """
   Lists branch names for branch pickers. Default branch is first when known.
 
-  Hosted repos read local refs; GitHub-backed repos use the public API (first
-  page, up to 100 names).
+  Hosted repos read local refs; GitHub-backed repos use `git ls-remote --heads`.
   """
   @spec list_branches(%Repository{}) ::
           {:ok, [String.t()]} | {:error, browse_error() | :invalid_reference}
@@ -235,35 +203,39 @@ defmodule Tarakan.RepositoryCode do
   end
 
   defp resolve_github_branch(repository, branch) do
-    # Prefer unlimited git protocol; REST only if mirror/ls-remote cannot answer.
-    case resolve_github_branch_via_git(repository, branch) do
-      {:ok, sha} ->
-        {:ok, sha}
+    if RepositoryMirror.enabled?() do
+      case RepositoryMirror.ls_remote_sha(repository, branch || "HEAD") do
+        {:ok, sha} ->
+          case RepositoryMirror.ensure_commit(repository, sha) do
+            :ok -> {:ok, sha}
+            {:error, reason} -> {:error, map_git_error(reason)}
+          end
 
-      {:error, _reason} ->
-        case verify_public_identity(repository) do
-          {:ok, metadata} ->
-            repository = rebind_identity(repository, metadata)
-
-            with {:ok, commit} <- fetch_branch_head(repository, branch),
-                 :ok <- cache_commit(repository, commit) do
-              {:ok, commit.sha}
-            end
-
-          {:error, :rate_limited} ->
-            {:error, :unavailable}
-
-          {:error, reason} ->
-            {:error, reason}
-        end
+        {:error, reason} ->
+          {:error, map_git_error(reason)}
+      end
+    else
+      # Test / legacy: optional REST when mirrors are off.
+      resolve_github_branch_via_rest(repository, branch)
     end
   end
 
-  defp resolve_github_branch_via_git(repository, branch) do
-    if RepositoryMirror.enabled?() do
-      with {:ok, sha} <- RepositoryMirror.ls_remote_sha(repository, branch || "HEAD"),
-           :ok <- RepositoryMirror.ensure_commit(repository, sha) do
-        {:ok, sha}
+  defp resolve_github_branch_via_rest(repository, branch) do
+    if rest_fallback_enabled?() do
+      case verify_public_identity(repository) do
+        {:ok, metadata} ->
+          repository = rebind_identity(repository, metadata)
+
+          with {:ok, commit} <- fetch_branch_head(repository, branch),
+               :ok <- cache_commit(repository, commit) do
+            {:ok, commit.sha}
+          end
+
+        {:error, :rate_limited} ->
+          {:error, :unavailable}
+
+        {:error, reason} ->
+          {:error, reason}
       end
     else
       {:error, :unavailable}
@@ -281,14 +253,37 @@ defmodule Tarakan.RepositoryCode do
     key = {:github_branches, repository.github_id}
 
     Cache.fetch(key, cache_ttl(:head_cache_ttl_ms, @head_ttl_ms), fn ->
+      if RepositoryMirror.enabled?() do
+        case RepositoryMirror.list_remote_heads(repository) do
+          {:ok, names} ->
+            {:ok, order_branches(names, repository.default_branch)}
+
+          {:error, reason} ->
+            {:error, map_git_error(reason)}
+        end
+      else
+        list_github_branches_via_rest(repository)
+      end
+    end)
+  end
+
+  defp list_github_branches_via_rest(repository) do
+    if rest_fallback_enabled?() do
       with :ok <- upstream_preflight(repository),
            {:ok, metadata} <- verify_public_identity(repository),
            repository = rebind_identity(repository, metadata),
            {:ok, names} <- GitHub.list_branches(repository.owner, repository.name) do
         {:ok, order_branches(names, repository.default_branch || metadata[:default_branch])}
       end
-    end)
+    else
+      {:error, :unavailable}
+    end
   end
+
+  defp map_git_error(:fetch_failed), do: :unavailable
+  defp map_git_error(:disabled), do: :unavailable
+  defp map_git_error(:not_found), do: :not_found
+  defp map_git_error(reason), do: reason
 
   defp order_branches(names, default_branch) do
     names = names |> Enum.uniq() |> Enum.reject(&(&1 in [nil, ""]))
@@ -492,9 +487,7 @@ defmodule Tarakan.RepositoryCode do
     end)
   end
 
-  # GitHub path: prefer the local git mirror (unlimited vs REST). On miss we
-  # `git fetch` the commit into the mirror, then re-read. REST is only a
-  # last-resort fallback when mirrors are disabled or git fails.
+  # GitHub path: local mirror only (git fetch). REST only when rest_fallback is on (tests).
   defp source_fetch_commit(repository, commit_sha) do
     if Repository.hosted?(repository) do
       case Local.read_commit(Storage.dir(repository), commit_sha) do
@@ -502,15 +495,11 @@ defmodule Tarakan.RepositoryCode do
         :miss -> {:error, :not_found}
       end
     else
-      github_object(
+      git_object(
         repository,
         commit_sha,
-        fn ->
-          RepositoryMirror.read_commit(repository.github_id, commit_sha)
-        end,
-        fn ->
-          GitHub.fetch_commit(repository.owner, repository.name, commit_sha)
-        end
+        fn -> RepositoryMirror.read_commit(repository.github_id, commit_sha) end,
+        fn -> GitHub.fetch_commit(repository.owner, repository.name, commit_sha) end
       )
     end
   end
@@ -529,22 +518,16 @@ defmodule Tarakan.RepositoryCode do
           {:ok, tree}
 
         :miss ->
-          if RepositoryMirror.enabled?() do
-            _ = ensure_default_mirrored(repository)
+          _ = ensure_default_mirrored(repository)
 
-            case read.() do
-              {:ok, tree} ->
-                {:ok, tree}
+          case read.() do
+            {:ok, tree} ->
+              {:ok, tree}
 
-              :miss ->
-                rest_fallback(repository, fn ->
-                  GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
-                end)
-            end
-          else
-            rest_fallback(repository, fn ->
-              GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
-            end)
+            :miss ->
+              rest_only(repository, fn ->
+                GitHub.fetch_tree(repository.owner, repository.name, tree_sha, recursive)
+              end)
           end
       end
     end
@@ -564,28 +547,22 @@ defmodule Tarakan.RepositoryCode do
           {:ok, blob}
 
         :miss ->
-          if RepositoryMirror.enabled?() do
-            _ = ensure_default_mirrored(repository)
+          _ = ensure_default_mirrored(repository)
 
-            case read.() do
-              {:ok, blob} ->
-                {:ok, blob}
+          case read.() do
+            {:ok, blob} ->
+              {:ok, blob}
 
-              :miss ->
-                rest_fallback(repository, fn ->
-                  GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
-                end)
-            end
-          else
-            rest_fallback(repository, fn ->
-              GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
-            end)
+            :miss ->
+              rest_only(repository, fn ->
+                GitHub.fetch_text_blob(repository.owner, repository.name, blob_sha)
+              end)
           end
       end
     end
   end
 
-  defp github_object(repository, commit_sha, read_fun, rest_fun) do
+  defp git_object(repository, commit_sha, read_fun, rest_fun) do
     case read_fun.() do
       {:ok, value} ->
         {:ok, value}
@@ -595,11 +572,17 @@ defmodule Tarakan.RepositoryCode do
           :ok ->
             case read_fun.() do
               {:ok, value} -> {:ok, value}
-              :miss -> rest_fallback(repository, rest_fun)
+              :miss -> rest_only(repository, rest_fun)
             end
 
-          {:error, _reason} ->
-            rest_fallback(repository, rest_fun)
+          {:error, :disabled} ->
+            rest_only(repository, rest_fun)
+
+          {:error, reason} ->
+            case rest_only(repository, rest_fun) do
+              {:error, :unavailable} -> {:error, map_git_error(reason)}
+              other -> other
+            end
         end
     end
   end
@@ -614,11 +597,11 @@ defmodule Tarakan.RepositoryCode do
     end
   end
 
-  defp rest_fallback(repository, fun) when is_function(fun, 0) do
+  # REST is test-only (mirrors off). Production has rest_fallback: false.
+  defp rest_only(repository, fun) when is_function(fun, 0) do
     if rest_fallback_enabled?() do
       with :ok <- upstream_preflight(repository) do
         case fun.() do
-          # Map GitHub REST quota to a neutral error (not "identity changed").
           {:error, :rate_limited} -> {:error, :unavailable}
           result -> result
         end
@@ -631,7 +614,7 @@ defmodule Tarakan.RepositoryCode do
   defp rest_fallback_enabled? do
     :tarakan
     |> Application.get_env(Tarakan.RepositoryMirror, [])
-    |> Keyword.get(:rest_fallback, true)
+    |> Keyword.get(:rest_fallback, false)
   end
 
   # Operators skipping rate limits also skip the mandatory REST identity re-check

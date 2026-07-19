@@ -20,7 +20,8 @@ config :tarakan, Tarakan.Repo,
 
 config :tarakan, Oban, testing: :manual
 
-config :tarakan, Tarakan.RepositoryMirror, enabled: false
+# Tests use the GitHub stub; enable REST object fallback with mirrors off.
+config :tarakan, Tarakan.RepositoryMirror, enabled: false, rest_fallback: true
 
 config :tarakan, Tarakan.HostedRepositories,
   root: "tmp/test_hosted#{System.get_env("MIX_TEST_PARTITION")}",

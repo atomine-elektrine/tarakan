@@ -106,7 +106,7 @@ defmodule Tarakan.RepositoryMirrorTest do
              RepositoryMirror.read_blob(@codex_github_id, shas.readme_blob)
   end
 
-  test "oversized blobs stay unmirrored and push their listing to the API", %{
+  test "oversized blobs stay unmirrored (no REST fill-in)", %{
     repository: repository,
     shas: shas
   } do
@@ -114,7 +114,7 @@ defmodule Tarakan.RepositoryMirrorTest do
 
     # The 600KB blob exceeded --filter=blob:limit and was never fetched.
     assert :miss = RepositoryMirror.read_blob(@codex_github_id, shas.big_blob)
-    # Its directory listing has no local size, so the whole tree defers.
+    # Its directory listing has no local size, so the whole tree stays a miss.
     assert :miss = RepositoryMirror.read_tree(@codex_github_id, shas.vendor_tree, false)
   end
 
@@ -139,14 +139,44 @@ defmodule Tarakan.RepositoryMirrorTest do
     assert InstrumentedGitHubClient.count(:repository) == 0
   end
 
-  test "browsing an unmirrored commit enqueues a mirror job", %{repository: repository} do
+  test "browsing an unmirrored commit fetches via git without REST", %{
+    repository: repository,
+    shas: shas
+  } do
+    refute RepositoryMirror.has_commit?(@codex_github_id, shas.commit)
+
+    start_supervised!(InstrumentedGitHubClient)
+    previous = Application.fetch_env!(:tarakan, :github_client)
+    Application.put_env(:tarakan, :github_client, InstrumentedGitHubClient)
+    on_exit(fn -> Application.put_env(:tarakan, :github_client, previous) end)
+
+    assert {:ok, %File{content: @readme}} =
+             RepositoryCode.browse(repository, shas.commit, "README.md")
+
+    assert RepositoryMirror.has_commit?(@codex_github_id, shas.commit)
+    assert InstrumentedGitHubClient.count(:commit) == 0
+    assert InstrumentedGitHubClient.count(:tree) == 0
+    assert InstrumentedGitHubClient.count(:blob) == 0
+    assert InstrumentedGitHubClient.count(:repository) == 0
+  end
+
+  test "unknown remote commit is unavailable and never hits REST", %{
+    repository: repository
+  } do
     commit_sha = String.duplicate("8", 40)
 
-    assert {:ok, %File{}} = RepositoryCode.browse(repository, commit_sha, "README.md")
+    start_supervised!(InstrumentedGitHubClient)
+    previous = Application.fetch_env!(:tarakan, :github_client)
+    Application.put_env(:tarakan, :github_client, InstrumentedGitHubClient)
+    on_exit(fn -> Application.put_env(:tarakan, :github_client, previous) end)
 
-    jobs = all_enqueued(worker: MirrorRepository)
-    assert Enum.any?(jobs, &(&1.args["commit_sha"] == commit_sha))
-    assert Enum.any?(jobs, &(&1.args["repository_id"] == repository.id))
+    assert {:error, :unavailable} =
+             RepositoryCode.browse(repository, commit_sha, "README.md")
+
+    assert InstrumentedGitHubClient.count(:commit) == 0
+    assert InstrumentedGitHubClient.count(:tree) == 0
+    assert InstrumentedGitHubClient.count(:blob) == 0
+    assert InstrumentedGitHubClient.count(:repository) == 0
   end
 
   test "sweep eviction removes the mirror when the repository goes private", %{
