@@ -750,13 +750,19 @@ defmodule TarakanWeb.RepositoryCodeLive do
     do: "Nothing has been pushed to this repository yet. Push a branch and it will appear here."
 
   defp error_message(:rate_limited),
-    do: "The source host could not serve this code safely. Try again shortly."
+    do:
+      "Could not load this commit from git or GitHub yet. Wait a few seconds for the mirror to fill, then retry."
+
+  defp error_message(:unavailable),
+    do:
+      "Could not load this commit from git or GitHub yet. Wait a few seconds for the mirror to fill, then retry."
 
   defp error_message(reason) when reason in [:identity_changed, :commit_mismatch],
     do: "Tarakan could not verify this source against the registered public repository."
 
   defp error_message(_error),
-    do: "The source host could not serve this code safely. Try again shortly."
+    do:
+      "Could not load this commit from git or GitHub yet. Wait a few seconds for the mirror to fill, then retry."
 
   defp suspicious_source_controls?(content) do
     String.contains?(content, <<0>>) or

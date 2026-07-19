@@ -112,17 +112,59 @@ defmodule Tarakan.RepositoryCode do
       if Repository.hosted?(repository) do
         resolve_hosted_head(repository)
       else
-        with {:ok, metadata} <- verify_public_identity(repository),
-             repository = rebind_identity(repository, metadata),
-             branch when is_binary(branch) and branch != "" <- Map.get(metadata, :default_branch) do
-          resolve_branch_commit(repository, branch)
-        else
-          nil -> {:error, :invalid_response}
-          "" -> {:error, :invalid_response}
-          {:error, reason} -> {:error, reason}
-          _other -> {:error, :invalid_response}
-        end
+        resolve_github_default_commit(repository)
       end
+    end
+  end
+
+  # Prefer git (no REST quota). Only hit the API if ls-remote/fetch cannot answer.
+  defp resolve_github_default_commit(repository) do
+    branch =
+      case repository.default_branch do
+        b when is_binary(b) and b != "" -> b
+        _ -> "HEAD"
+      end
+
+    case resolve_github_branch_via_git(repository, branch) do
+      {:ok, sha} ->
+        {:ok, sha}
+
+      {:error, _} ->
+        case resolve_github_branch_via_git(repository, "HEAD") do
+          {:ok, sha} ->
+            {:ok, sha}
+
+          {:error, _} ->
+            resolve_github_default_commit_via_api(repository)
+        end
+    end
+  end
+
+  defp resolve_github_default_commit_via_api(repository) do
+    case verify_public_identity(repository) do
+      {:ok, metadata} ->
+        repository = rebind_identity(repository, metadata)
+
+        branch =
+          cond do
+            is_binary(metadata[:default_branch]) and metadata[:default_branch] != "" ->
+              metadata[:default_branch]
+
+            is_binary(repository.default_branch) and repository.default_branch != "" ->
+              repository.default_branch
+
+            true ->
+              "main"
+          end
+
+        resolve_branch_commit(repository, branch)
+
+      # Do not fail the whole code view when GitHub REST is exhausted.
+      {:error, :rate_limited} ->
+        {:error, :unavailable}
+
+      {:error, reason} ->
+        {:error, reason}
     end
   end
 
@@ -199,11 +241,20 @@ defmodule Tarakan.RepositoryCode do
         {:ok, sha}
 
       {:error, _reason} ->
-        with {:ok, metadata} <- verify_public_identity(repository),
-             repository = rebind_identity(repository, metadata),
-             {:ok, commit} <- fetch_branch_head(repository, branch),
-             :ok <- cache_commit(repository, commit) do
-          {:ok, commit.sha}
+        case verify_public_identity(repository) do
+          {:ok, metadata} ->
+            repository = rebind_identity(repository, metadata)
+
+            with {:ok, commit} <- fetch_branch_head(repository, branch),
+                 :ok <- cache_commit(repository, commit) do
+              {:ok, commit.sha}
+            end
+
+          {:error, :rate_limited} ->
+            {:error, :unavailable}
+
+          {:error, reason} ->
+            {:error, reason}
         end
     end
   end
