@@ -923,6 +923,10 @@ defmodule Tarakan.Scans do
     if count < limit, do: :ok, else: {:error, :submission_limit}
   end
 
+  defp scan_submission_quota_precheck(%Account{platform_role: role})
+       when role in ["moderator", "admin"],
+       do: :ok
+
   defp scan_submission_quota_precheck(%Account{} = account) do
     cutoff = DateTime.add(DateTime.utc_now(), -1, :day)
 
@@ -939,12 +943,23 @@ defmodule Tarakan.Scans do
 
   defp scan_submission_quota_precheck(_account), do: {:error, :unauthorized}
 
-  defp scan_submission_limit(%Account{platform_role: role}) when role in ["moderator", "admin"],
-    do: 10_000
-
   defp scan_submission_limit(%Account{trust_tier: "reviewer"}), do: 100
   defp scan_submission_limit(%Account{state: "active"}), do: 30
   defp scan_submission_limit(%Account{}), do: 3
+
+  defp scan_submission_preflight(
+         %Scope{account: %Account{platform_role: role}},
+         %Repository{}
+       )
+       when role in ["moderator", "admin"],
+       do: :ok
+
+  defp scan_submission_preflight(
+         %Scope{platform_role: role},
+         %Repository{}
+       )
+       when role in ["moderator", "admin"],
+       do: :ok
 
   defp scan_submission_preflight(
          %Scope{account_id: account_id},

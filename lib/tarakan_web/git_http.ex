@@ -159,6 +159,12 @@ defmodule TarakanWeb.GitHTTP do
     end
   end
 
+  defp rate_limit(_conn, %{platform_role: role}) when role in ["admin", "moderator"], do: :ok
+
+  defp rate_limit(_conn, %{account: %{platform_role: role}})
+       when role in ["admin", "moderator"],
+       do: :ok
+
   defp rate_limit(conn, scope) do
     {key, limit, window} = rate_limit_bucket(conn, scope)
 

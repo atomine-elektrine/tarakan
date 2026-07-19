@@ -1564,6 +1564,14 @@ defmodule Tarakan.Work do
       else: :ok
   end
 
+  defp proposal_preflight(%Scope{account: %Account{platform_role: role}}, %Repository{})
+       when role in ["moderator", "admin"],
+       do: :ok
+
+  defp proposal_preflight(%Scope{platform_role: role}, %Repository{})
+       when role in ["moderator", "admin"],
+       do: :ok
+
   defp proposal_preflight(%Scope{account_id: account_id}, %Repository{id: repository_id}) do
     # Burst limits. Exact duplicate jobs are rejected separately under row lock.
     with :ok <- rate_check({:task_proposal, account_id}, 10, 60, :proposal_rate_limited),
@@ -1600,6 +1608,14 @@ defmodule Tarakan.Work do
   defp proposal_limit(%Account{state: "active"}), do: 15
   defp proposal_limit(%Account{}), do: 3
 
+  defp claim_mutation_preflight(%Scope{account: %Account{platform_role: role}})
+       when role in ["moderator", "admin"],
+       do: :ok
+
+  defp claim_mutation_preflight(%Scope{platform_role: role})
+       when role in ["moderator", "admin"],
+       do: :ok
+
   defp claim_mutation_preflight(%Scope{account_id: account_id}) do
     rate_check(
       {:task_claim_mutation, account_id},
@@ -1615,6 +1631,10 @@ defmodule Tarakan.Work do
       {:error, _reason, _retry_after} -> {:error, error}
     end
   end
+
+  # Concurrent active claims. Operators are not capped.
+  defp claim_limit(%Account{platform_role: role}) when role in ["moderator", "admin"],
+    do: 1_000_000
 
   defp claim_limit(%Account{state: "probation"}), do: 1
   defp claim_limit(%Account{}), do: 3
