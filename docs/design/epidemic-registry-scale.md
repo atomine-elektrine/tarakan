@@ -358,14 +358,14 @@ Partial predicates must match Ecto (`is_nil` / `!= ""` → SQL `IS NOT NULL AND 
 
 #### Zero-downtime index / migration ops
 
-Deploy path today: Docker image via `ops/deploy.sh` → `docker compose up`; app container migrates then serves (`docker-compose.yml`: migrate then server via release).
+Deploy path today: Docker image via `scripts/deploy/deploy.sh` → `docker compose up`; app container migrates then serves (`deploy/docker/compose.yml`: migrate then server via release).
 
 **Pool sizing (authoritative for deploy):**
 
 | Source | Default `POOL_SIZE` |
 |--------|---------------------|
 | `config/runtime.exs` | `10` if env unset |
-| **`docker-compose.yml` production** | **`POOL_SIZE:-5`** (“minimum 2 GB deployment”) — **this is the deploy default** |
+| **`deploy/docker/compose.yml` production** | **`POOL_SIZE:-5`** (“minimum 2 GB deployment”) — **this is the deploy default** |
 
 Size Oban against **compose default 5**, not runtime’s 10:
 
@@ -1169,7 +1169,7 @@ Runtime `read_from_rollup: false`; optional `epidemics: 0` queue.
 - `lib/tarakan_web/controllers/seo_controller.ex`  
 - `lib/tarakan/sync/repository_sweep.ex`  
 - `config/config.exs`, `config/runtime.exs` (`POOL_SIZE` default 10 if unset)  
-- `ops/deploy.sh`, `docker-compose.yml` (`POOL_SIZE:-5`)  
+- `scripts/deploy/deploy.sh`, `deploy/docker/compose.yml` (`POOL_SIZE:-5`)  
 - Migrations: canonical memory, pattern_key  
 
 ---

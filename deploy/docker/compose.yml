@@ -1,9 +1,11 @@
 # Single-node Tarakan deployment: the Phoenix release plus PostgreSQL.
 #
-#   1. cp .env.example .env  &&  edit it (at minimum SECRET_KEY_BASE, PHX_HOST)
-#   2. docker compose up -d --build
+# From the repo root (or /opt/tarakan after rsync):
 #
-# The app runs database migrations on start, then serves on PORT (default 4000).
+#   1. cp .env.example .env  &&  edit it (at minimum SECRET_KEY_BASE, PHX_HOST)
+#   2. docker compose --project-directory . -f deploy/docker/compose.yml up -d --build
+#
+# Production activate path: scripts/deploy/deploy.sh (loads a pre-built image).
 # Put a TLS-terminating reverse proxy (Caddy, nginx, Traefik) in front for HTTPS.
 
 services:
@@ -29,7 +31,9 @@ services:
 
   app:
     image: ${APP_IMAGE:-tarakan-app}
-    build: .
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
     restart: unless-stopped
     logging:
       driver: json-file

@@ -8,7 +8,7 @@ Type=oneshot
 User=linuxuser
 Group=linuxuser
 WorkingDirectory=/opt/tarakan
-ExecStart=/opt/tarakan/ops/backup.sh
+ExecStart=/opt/tarakan/scripts/deploy/backup.sh
 
 # The backup process only needs its application directory and Docker.
 NoNewPrivileges=true

@@ -70,7 +70,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Build production image
-        run: docker build --pull --tag "$IMAGE" .
+        run: docker build --pull -f deploy/docker/Dockerfile --tag "$IMAGE" .
 
       - name: Package production image
         run: docker save "$IMAGE" | gzip -1 > /tmp/tarakan-image.tar.gz
@@ -109,4 +109,4 @@ jobs:
             "$DEPLOY_USER@$DEPLOY_HOST:/opt/tarakan/.deploy/tarakan-image.tar.gz"
 
       - name: Activate release
-        run: ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd /opt/tarakan && ./ops/deploy.sh '$IMAGE'"
+        run: ssh "$DEPLOY_USER@$DEPLOY_HOST" "cd /opt/tarakan && ./scripts/deploy/deploy.sh '$IMAGE'"
