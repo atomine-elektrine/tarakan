@@ -92,6 +92,7 @@ jobs:
             --exclude='.git/' \
             --exclude='.env' \
             --exclude='.deploy/' \
+            --exclude='.secrets/' \
             --exclude='backups/' \
             --exclude='_build/' \
             --exclude='deps/' \
