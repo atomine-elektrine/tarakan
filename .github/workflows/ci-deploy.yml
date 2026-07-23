@@ -78,17 +78,32 @@ jobs:
       - name: Configure deployment SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          # Prefer secret/var; fall back to the production host key pin.
+          DEPLOY_SSH_HOST_KEY: ${{ secrets.DEPLOY_SSH_HOST_KEY || vars.DEPLOY_SSH_HOST_KEY || '66.42.113.222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdLaUbq4l8akmbiTurBX3F1nTw8AxJZ1efIN3t2ptGq' }}
         run: |
           install -d -m 0700 ~/.ssh
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 0600 ~/.ssh/id_ed25519
-          printf '%s\n' '66.42.113.222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINdLaUbq4l8akmbiTurBX3F1nTw8AxJZ1efIN3t2ptGq' > ~/.ssh/known_hosts
+          {
+            printf '%s\n' "$DEPLOY_SSH_HOST_KEY"
+            while IFS= read -r line; do
+              case "$line" in
+                ''|'#'*) continue ;;
+              esac
+              host_field="${line%% *}"
+              rest="${line#* }"
+              if [[ "$host_field" == *@* ]]; then
+                printf '%s %s\n' "${host_field##*@}" "$rest"
+              fi
+            done <<< "$DEPLOY_SSH_HOST_KEY"
+          } > ~/.ssh/known_hosts
+          chmod 0600 ~/.ssh/known_hosts
 
       - name: Upload release
         run: |
           rsync -az --delete-delay \
             --chown="$DEPLOY_USER:linuxuser" \
-            --chmod=Dg+rwx,Fg+rw \
+            --chmod=D755,F644 \
             --exclude='.git/' \
             --exclude='.env' \
             --exclude='.deploy/' \
@@ -105,6 +120,9 @@ jobs:
             --exclude='priv/static/assets/' \
             --exclude='priv/static/cache_manifest.json' \
             ./ "$DEPLOY_USER@$DEPLOY_HOST:/opt/tarakan/"
+          # Executable deploy scripts (rsync F644 would strip +x).
+          ssh "$DEPLOY_USER@$DEPLOY_HOST" \
+            "chmod 755 /opt/tarakan/scripts/deploy/*.sh /opt/tarakan/ops/*.sh 2>/dev/null || true"
           rsync -az /tmp/tarakan-image.tar.gz \
             "$DEPLOY_USER@$DEPLOY_HOST:/opt/tarakan/.deploy/tarakan-image.tar.gz"
 

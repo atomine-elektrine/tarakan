@@ -40,6 +40,8 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    security_opt:
+      - no-new-privileges:true
     # Erlang sizes its port table from RLIMIT_NOFILE. Some Docker hosts expose
     # a billion-file limit, which wastes more than 1 GB before serving traffic.
     ulimits:
